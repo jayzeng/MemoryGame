@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CardItem, GameState, Squishmallow } from '../types';
 import { MOCK_SQUISHMALLOWS, WORLDS } from '../constants';
@@ -12,6 +12,56 @@ import { storage } from '../utils/storage';
 // Helper to shuffle array
 const shuffle = <T,>(array: T[]): T[] => {
   return [...array].sort(() => Math.random() - 0.5);
+};
+
+type LearningEvent = {
+  type: 'match' | 'mismatch';
+  word: string;
+  letters: string[];
+  hint: string;
+  sentence: string;
+  image?: string;
+};
+
+const getSpellingLetters = (word: string) => {
+  const normalized = word.replace(/[^A-Za-z]/g, '');
+  if (normalized.length > 0) return normalized.split('');
+  return Array.from(word);
+};
+
+const buildLearningEvent = (
+  squishmallow: Squishmallow,
+  type: LearningEvent['type'],
+  related?: Squishmallow
+): LearningEvent => {
+  const letters = getSpellingLetters(squishmallow.name);
+  const firstLetter = letters[0] ?? squishmallow.name[0] ?? '';
+  const lastLetter = letters[letters.length - 1] ?? squishmallow.name.slice(-1);
+
+  const hint =
+    type === 'match'
+      ? `Great job! ${squishmallow.name} has ${letters.length} letter${
+          letters.length === 1 ? '' : 's'
+        } and starts with ${firstLetter}.`
+      : `Try again! ${squishmallow.name} ends with ${lastLetter} and has ${letters.length} letters. Say each letter out loud.`;
+
+  const sentence =
+    type === 'match'
+      ? squishmallow.bio
+        ? `"${squishmallow.bio}"`
+        : `You just found ${squishmallow.name}!`
+      : related
+      ? `${related.name} was the other card; notice how ${squishmallow.name} sounds different.`
+      : squishmallow.description || `Spell ${squishmallow.name} slowly to remember it.`;
+
+  return {
+    type,
+    word: squishmallow.name,
+    letters,
+    hint,
+    sentence,
+    image: squishmallow.image,
+  };
 };
 
 const getAgeText = (squishmallow: Squishmallow) => {
@@ -34,6 +84,7 @@ export const Game: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<Squishmallow[]>([]);
   const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
+  const [learningEvent, setLearningEvent] = useState<LearningEvent | null>(null);
 
   // Initialize Game
   useEffect(() => {
@@ -74,6 +125,7 @@ export const Game: React.FC = () => {
     setShowConfetti(false);
     setIsPaused(false);
     setSelectedSquish(null);
+    setLearningEvent(null);
   };
 
   const getSquishmallow = (charId: string) => MOCK_SQUISHMALLOWS.find(s => s.id === charId)!;
@@ -108,6 +160,8 @@ export const Game: React.FC = () => {
                   return [...prev, char];
               });
           }
+          const matchedSquish = getSquishmallow(card1.characterId);
+          setLearningEvent(buildLearningEvent(matchedSquish, 'match'));
 
           setMatchedIds(prev => [...prev, id1, id2]);
           setCards(prev => prev.map(c => (c.id === id1 || c.id === id2) ? { ...c, isMatched: true } : c));
@@ -115,6 +169,9 @@ export const Game: React.FC = () => {
         } else {
           // No match, flip back after delay
           soundManager.playMismatch();
+          const firstSquish = getSquishmallow(card1.characterId);
+          const secondSquish = getSquishmallow(card2.characterId);
+          setLearningEvent(buildLearningEvent(firstSquish, 'mismatch', secondSquish));
           const timer = setTimeout(() => {
             setCards(prev => prev.map(c => (c.id === id1 || c.id === id2) ? { ...c, isFlipped: false } : c));
             setFlippedIds([]);
@@ -184,6 +241,12 @@ export const Game: React.FC = () => {
 
   if (!worldId) return null;
 
+  const panelBorderClasses = learningEvent
+    ? learningEvent.type === 'match'
+      ? 'border-[#FFE9A8]'
+      : 'border-[#D2F7FF]'
+    : 'border-dashed border-gray-200';
+
   return (
     <div className="min-h-screen bg-[#CDEBFF] flex flex-col relative overflow-hidden">
       {showConfetti && <ReactConfetti numberOfPieces={200} recycle={false} />}
@@ -216,6 +279,63 @@ export const Game: React.FC = () => {
             ))}
          </div>
       </main>
+
+      <section className="px-4 pb-8">
+        <div className="max-w-4xl mx-auto">
+          <div className={`bg-white/90 border-4 rounded-[2rem] p-6 shadow-lg transition-all ${panelBorderClasses}`}>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em] text-gray-400 mb-1">
+                  {learningEvent
+                    ? learningEvent.type === 'match'
+                      ? 'Word Spotlight'
+                      : 'Spelling Reminder'
+                    : 'Word Builder'}
+                </p>
+                <h3 className="font-heading text-2xl text-[#6B4F3F] leading-snug">
+                  {learningEvent?.word || 'Flip cards to unlock new words'}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {learningEvent
+                    ? 'Trace each letter and say it aloud to lock in the spelling.'
+                    : 'Keep matching to see playful hints and spelling tips.'}
+                </p>
+              </div>
+              {learningEvent && (
+                <Button
+                  variant="icon"
+                  onClick={() => soundManager.speak(learningEvent.word)}
+                  aria-label={`Hear ${learningEvent.word}`}
+                >
+                  <Volume2 size={20} />
+                </Button>
+              )}
+            </div>
+
+            {learningEvent ? (
+              <>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {learningEvent.letters.map((letter, index) => (
+                    <span
+                      key={`${letter}-${index}`}
+                      className="px-3 py-2 text-lg font-bold rounded-2xl border border-[#D1D5DB] bg-white/70"
+                    >
+                      {letter}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-700 mt-4">{learningEvent.hint}</p>
+                <p className="text-xs text-gray-400 mt-1">{learningEvent.sentence}</p>
+              </>
+            ) : (
+              <p className="text-sm text-gray-600 mt-4">
+                Each friend has a name hidden behind the cards. Match pairs to reveal pronunciations, hints,
+                and short sentences that make spelling stick.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Pause Modal */}
       {isPaused && (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import { Button } from './Button';
 import { Link } from 'react-router-dom';
@@ -13,6 +13,15 @@ export const ParadeBook: React.FC = () => {
   }, []);
 
   const collection = MOCK_SQUISHMALLOWS;
+  const totalCount = collection.length;
+  const unlockedCount = unlockedIds.length;
+  const lockedCount = totalCount - unlockedCount;
+
+  const sortedCollection = useMemo(() => {
+    const unlocked = collection.filter((squish) => unlockedIds.includes(squish.id));
+    const locked = collection.filter((squish) => !unlockedIds.includes(squish.id));
+    return [...unlocked, ...locked];
+  }, [collection, unlockedIds]);
 
   const getRarityIcon = (type: string) => {
     switch (type) {
@@ -37,7 +46,7 @@ export const ParadeBook: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#FFFBEB] p-6 pb-24">
       <div className="max-w-3xl mx-auto">
-        <header className="flex items-center justify-between mb-8">
+        <header className="flex items-center justify-between mb-6">
             <Link to="/">
                 <Button variant="icon">
                     <ArrowLeft size={24} />
@@ -46,14 +55,28 @@ export const ParadeBook: React.FC = () => {
             <div className="flex flex-col items-center">
               <h1 className="font-heading text-3xl font-bold text-[#6B4F3F]">Parade Book</h1>
               <span className="font-body text-sm text-[#6B4F3F] opacity-70">
-                {unlockedIds.length} / {collection.length} Found
+                {unlockedCount} / {totalCount} Found
               </span>
             </div>
             <div className="w-12" /> {/* Spacer for balance */}
         </header>
 
+        <section className="bg-white/80 rounded-3xl shadow p-4 mb-6 border border-white/60">
+          <div className="flex flex-wrap justify-between gap-3 text-sm font-semibold text-[#6B4F3F]">
+            <span>Unlocked {unlockedCount}</span>
+            <span>Locked {lockedCount}</span>
+            <span>Total {totalCount}</span>
+          </div>
+          <div className="mt-3 h-3 bg-[#E6E6E6] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
+              style={{ width: `${totalCount ? (unlockedCount / totalCount) * 100 : 0}%` }}
+            />
+          </div>
+        </section>
+
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {collection.map((squish) => {
+            {sortedCollection.map((squish) => {
                 const isUnlocked = unlockedIds.includes(squish.id);
                 return (
                   <div key={squish.id} className="flex flex-col items-center gap-2 group">
