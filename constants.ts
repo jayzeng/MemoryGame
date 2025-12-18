@@ -12,6 +12,12 @@ export const COLORS = {
   INK_BROWN: '#6B4F3F',
 };
 
+const proxyImageUrl = (input: string | undefined | null) => {
+  if (!input) return '';
+  const trimmed = input.replace(/^https?:\/\//i, '');
+  return `https://images.weserv.nl/?url=${encodeURIComponent(trimmed)}&w=512&auto=format&dpr=1`;
+};
+
 // Map the imported JSON data to the Squishmallow interface
 const rawData = SQUISHMALLOWS_DATA;
 
@@ -27,7 +33,7 @@ export const MOCK_SQUISHMALLOWS: Squishmallow[] = rawData.map((item, index) => {
   return {
     id: `sq_${index}_${item.name.replace(/\s/g, '')}`,
     name: item.name,
-    image: item.image_url,
+    image: proxyImageUrl(item.image_url),
     description: source.bio 
         ? `${item.name} is a ${source.type || 'friend'} who loves to play!` // Short description fallback if bio is long
         : `${item.name} is a wonderful friend who is excited to join your parade!`,

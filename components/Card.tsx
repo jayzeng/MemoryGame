@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { CardItem, Squishmallow } from '../types';
 
 interface CardProps {
@@ -14,6 +14,15 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
       onClick(item.id);
     }
   };
+
+  const fallbackImage = useMemo(
+    () =>
+      'data:image/svg+xml,%3Csvg%20width%3D%22200%22%20height%3D%22180%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Crect%20width%3D%22200%22%20height%3D%22180%22%20fill%3D%22%23F9F3FF%22/%3E%3Ctext%20x%3D%22100%22%20y%3D%2295%22%20font-size%3D%2216%22%20font-family%3D%22Nunito%2C%20sans-serif%22%20fill%3D%22%23C1A1E4%22%20text-anchor%3D%22middle%22%3EImage%20unavailable%3C/text%3E%3C/svg%3E',
+    []
+  );
+
+  const [imgSrc, setImgSrc] = useState(squishmallow.image);
+  const handleImageError = () => setImgSrc(fallbackImage);
 
   return (
     <div 
@@ -39,9 +48,11 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
           {/* Image Container */}
           <div className="flex-1 w-full relative overflow-hidden p-2">
             <img 
-              src={squishmallow.image} 
+              src={imgSrc}
               alt={squishmallow.name}
               className="w-full h-full object-contain"
+              onError={handleImageError}
+              referrerPolicy="no-referrer"
             />
           </div>
           
