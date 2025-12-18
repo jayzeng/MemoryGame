@@ -28,11 +28,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          # Workaround for npm optional dependencies bug on different platforms
-          # Remove package-lock.json to allow npm to install platform-specific optional deps
-          rm -f package-lock.json
-          npm install
+        run: npm ci
 
       - name: Build
         run: npm run build
