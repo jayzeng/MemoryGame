@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Squishmallow Memory Parade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+      /* Custom Font Classes to match spec */
+      .font-heading { font-family: 'Baloo 2', cursive; }
+      .font-body { font-family: 'Nunito', sans-serif; }
+      
+      /* Flip Card Utilities */
+      .perspective-1000 { perspective: 1000px; }
+      .transform-style-3d { transform-style: preserve-3d; }
+      .backface-hidden { backface-visibility: hidden; }
+      .rotate-y-180 { transform: rotateY(180deg); }
+      
+      /* Hide scrollbar for clean UI */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      /* Animations */
+      @keyframes dance {
+        0%, 100% { transform: rotate(-3deg) translateY(0); }
+        50% { transform: rotate(3deg) translateY(-8px); }
+      }
+      .animate-dance {
+        animation: dance 3s ease-in-out infinite;
+      }
+      
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+      }
+      .animate-float {
+        animation: float 4s ease-in-out infinite;
+      }
+
+      /* Fluid Card Flip - Springy Ease */
+      .flip-transition {
+        transition: transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+
+      /* Match Celebration */
+      @keyframes match-bounce {
+        0% { transform: scale(1); }
+        30% { transform: scale(1.15); }
+        50% { transform: scale(0.95); }
+        70% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+      .animate-match-bounce {
+        animation: match-bounce 0.6s ease-out forwards;
+        z-index: 10;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1?dev",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime?dev",
+    "react-dom": "https://esm.sh/react-dom@18.3.1?dev",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?dev",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0?deps=react@18.3.1&dev",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.22.3?deps=react@18.3.1,react-dom@18.3.1&dev",
+    "react-confetti": "https://esm.sh/react-confetti@6.1.0?deps=react@18.3.1,react-dom@18.3.1&dev",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
+</head>
+  <body class="bg-[#CDEBFF] text-[#6B4F3F] font-body selection:bg-[#FFD6E8]">
+    <div id="root"></div>
+  </body>
+</html>
