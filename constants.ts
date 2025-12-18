@@ -21,7 +21,19 @@ const proxyImageUrl = (input: string | undefined | null) => {
 // Map the imported JSON data to the Squishmallow interface
 const rawData = SQUISHMALLOWS_DATA;
 
+const sanitizeIdentifier = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const buildSquishmallowId = (item: any) => {
+  const base = item.collector_number ? `${item.collector_number}_${item.name}` : item.name;
+  return `sq_${sanitizeIdentifier(base)}`;
+};
+
 export const MOCK_SQUISHMALLOWS: Squishmallow[] = rawData.map((item, index) => {
+  const squishId = buildSquishmallowId(item);
   // Deterministic attributes based on index for variety
   let type: 'classic' | 'rare' | 'ultra-rare' = 'classic';
   if (index % 10 === 0) type = 'ultra-rare';
@@ -33,7 +45,7 @@ export const MOCK_SQUISHMALLOWS: Squishmallow[] = rawData.map((item, index) => {
   const debutYear = Number.isNaN(parsedYear) ? undefined : parsedYear;
 
   return {
-    id: `sq_${index}_${item.name.replace(/\s/g, '')}`,
+    id: squishId,
     name: item.name,
     image: proxyImageUrl(item.image_url),
     description: source.bio 
