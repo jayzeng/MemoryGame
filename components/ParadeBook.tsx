@@ -1,16 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import { Button } from './Button';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Lock, Heart, Star, Sparkles } from 'lucide-react';
+import { ArrowLeft, Lock, Heart, Star, Sparkles, Volume2, X } from 'lucide-react';
 import { storage } from '../utils/storage';
+import { Squishmallow } from '../types';
+import { soundManager } from '../utils/SoundManager';
+import { getAgeText } from '../utils/squishmallowHelpers';
 
 export const ParadeBook: React.FC = () => {
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
+  const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
 
   useEffect(() => {
     setUnlockedIds(storage.getUnlockedIds());
   }, []);
+
+  useEffect(() => {
+    if (!selectedSquish) return;
+    const textToSpeak = selectedSquish.bio || selectedSquish.description || selectedSquish.name;
+    soundManager.speak(textToSpeak);
+  }, [selectedSquish]);
 
   const collection = MOCK_SQUISHMALLOWS;
   const totalCount = collection.length;
@@ -42,6 +52,23 @@ export const ParadeBook: React.FC = () => {
       default: return 'Classic';
      }
   };
+
+  const closeDetailsModal = useCallback(() => {
+    soundManager.stopSpeaking();
+    setSelectedSquish(null);
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (selectedSquish) {
+        closeDetailsModal();
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [selectedSquish, closeDetailsModal]);
 
   return (
     <div className="min-h-screen bg-[#FFFBEB] p-6 pb-24">
@@ -75,12 +102,24 @@ export const ParadeBook: React.FC = () => {
           </div>
         </section>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {sortedCollection.map((squish) => {
                 const isUnlocked = unlockedIds.includes(squish.id);
                 return (
                   <div key={squish.id} className="flex flex-col items-center gap-2 group">
-                      <div className={`relative w-full aspect-[3/4] rounded-3xl overflow-hidden shadow-lg border-4 transition-transform duration-300 group-hover:scale-[1.03] ${isUnlocked ? 'border-white bg-white' : 'border-[#E6E6E6] bg-[#E6E6E6]'}`}>
+                      <div
+                          role={isUnlocked ? 'button' : undefined}
+                          tabIndex={isUnlocked ? 0 : undefined}
+                          onClick={() => isUnlocked && setSelectedSquish(squish)}
+                          onKeyDown={(event) => {
+                              if (!isUnlocked) return;
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setSelectedSquish(squish);
+                              }
+                          }}
+                          className={`relative w-full aspect-[3/4] rounded-3xl overflow-hidden shadow-lg border-4 transition-transform duration-300 group-hover:scale-[1.03] ${isUnlocked ? 'border-white bg-white cursor-pointer' : 'border-[#E6E6E6] bg-[#E6E6E6]'}`}
+                      >
                           {isUnlocked ? (
                               <>
                                   <img src={squish.image} alt={squish.name} className="w-full h-full object-cover" />
@@ -106,6 +145,63 @@ export const ParadeBook: React.FC = () => {
             })}
         </div>
       </div>
+
+      {selectedSquish && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md flex flex-col gap-4 shadow-2xl border-8 border-[#FFE9A8] relative max-h-[90vh] overflow-y-auto no-scrollbar">
+            <button
+              onClick={closeDetailsModal}
+              className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full hover:bg-gray-200 text-gray-500 transition-colors z-10"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="w-full aspect-square bg-gradient-to-br from-[#FFF0F5] to-white rounded-3xl p-6 flex items-center justify-center shadow-inner">
+              <img src={selectedSquish.image} alt={selectedSquish.name} className="w-full h-full object-contain drop-shadow-xl" />
+            </div>
+
+            <div className="text-center flex flex-col gap-2">
+              <div>
+                <h3 className="font-heading text-4xl text-[#6B4F3F] leading-tight">{selectedSquish.name}</h3>
+                {selectedSquish.species && (
+                  <span className="bg-[#FFE9A8] text-[#8A6D1F] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-block mt-1">
+                    {selectedSquish.species}
+                  </span>
+                )}
+                <p className="text-sm text-gray-500 mt-1">{getAgeText(selectedSquish)}</p>
+              </div>
+
+              {selectedSquish.squishdate && (
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest flex items-center justify-center gap-1">
+                  <Sparkles size={12} /> Born: {selectedSquish.squishdate}
+                </p>
+              )}
+
+              <div className="bg-[#F8FAFC] p-4 rounded-2xl text-left border-2 border-[#E2E8F0] mt-2">
+                <p className="font-body text-[#6B4F3F] text-sm leading-relaxed opacity-90">
+                  {selectedSquish.bio || selectedSquish.description}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <Button
+                variant="icon"
+                onClick={() => {
+                  const textToSpeak = selectedSquish.bio || selectedSquish.description || selectedSquish.name;
+                  soundManager.speak(textToSpeak);
+                }}
+                aria-label={`Hear more about ${selectedSquish.name}`}
+              >
+                <Volume2 size={20} />
+              </Button>
+              <Button variant="secondary" onClick={closeDetailsModal}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

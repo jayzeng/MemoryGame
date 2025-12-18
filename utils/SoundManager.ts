@@ -122,6 +122,11 @@ class SoundManager {
     osc.start();
     osc.stop(this.audioContext.currentTime + duration);
   }
+
+  public stopSpeaking() {
+    if (!this.synth) return;
+    this.synth.cancel();
+  }
 }
 
 export const soundManager = new SoundManager();

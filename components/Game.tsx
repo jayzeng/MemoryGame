@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CardItem, GameState, Squishmallow } from '../types';
 import { MOCK_SQUISHMALLOWS, WORLDS } from '../constants';
@@ -8,6 +8,7 @@ import { Pause, Star, Home, RotateCw, Play, Volume2, Sparkles, X, Info } from 'l
 import ReactConfetti from 'react-confetti';
 import { soundManager } from '../utils/SoundManager';
 import { storage } from '../utils/storage';
+import { getAgeText } from '../utils/squishmallowHelpers';
 
 // Helper to shuffle array
 const shuffle = <T,>(array: T[]): T[] => {
@@ -64,14 +65,6 @@ const buildLearningEvent = (
   };
 };
 
-const getAgeText = (squishmallow: Squishmallow) => {
-  if (!squishmallow.debutYear) return 'Age unknown';
-  const currentYear = new Date().getFullYear();
-  const age = currentYear - squishmallow.debutYear;
-  if (age <= 0) return 'New this year!';
-  return `${age} year${age === 1 ? '' : 's'} old`;
-};
-
 export const Game: React.FC = () => {
   const { worldId } = useParams<{ worldId: string }>();
   const navigate = useNavigate();
@@ -91,6 +84,10 @@ export const Game: React.FC = () => {
     reviewQueue.length > 0 &&
     currentReviewIndex < reviewQueue.length;
   const currentReviewEvent = shouldShowReview ? reviewQueue[currentReviewIndex] : null;
+  const closeSelectedSquish = useCallback(() => {
+    soundManager.stopSpeaking();
+    setSelectedSquish(null);
+  }, []);
 
   // Initialize Game
   useEffect(() => {
@@ -221,6 +218,22 @@ export const Game: React.FC = () => {
     if (!shouldShowReview || !currentReviewEvent) return;
     soundManager.speak(currentReviewEvent.sentence);
   }, [shouldShowReview, currentReviewEvent]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (selectedSquish) {
+        closeSelectedSquish();
+        return;
+      }
+      if (isPaused) {
+        setIsPaused(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [selectedSquish, isPaused, closeSelectedSquish]);
 
   const handleCardClick = (id: string) => {
     if (flippedIds.length >= 2 || isPaused || gameState !== GameState.PLAYING) return;
@@ -426,7 +439,7 @@ export const Game: React.FC = () => {
             <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl animate-in zoom-in-95 border-8 border-[#CDEBFF] relative max-h-[90vh] overflow-y-auto no-scrollbar">
                 
                 <button 
-                    onClick={() => setSelectedSquish(null)} 
+                    onClick={closeSelectedSquish} 
                     className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full hover:bg-gray-200 text-gray-500 transition-colors z-10"
                 >
                     <X size={20} />
