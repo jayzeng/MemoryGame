@@ -84,7 +84,13 @@ export const Game: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<Squishmallow[]>([]);
   const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
-  const [learningEvent, setLearningEvent] = useState<LearningEvent | null>(null);
+  const [reviewQueue, setReviewQueue] = useState<LearningEvent[]>([]);
+  const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+  const shouldShowReview =
+    gameState === GameState.COMPLETED &&
+    reviewQueue.length > 0 &&
+    currentReviewIndex < reviewQueue.length;
+  const currentReviewEvent = shouldShowReview ? reviewQueue[currentReviewIndex] : null;
 
   // Initialize Game
   useEffect(() => {
@@ -125,7 +131,8 @@ export const Game: React.FC = () => {
     setShowConfetti(false);
     setIsPaused(false);
     setSelectedSquish(null);
-    setLearningEvent(null);
+    setReviewQueue([]);
+    setCurrentReviewIndex(0);
   };
 
   const getSquishmallow = (charId: string) => MOCK_SQUISHMALLOWS.find(s => s.id === charId)!;
@@ -161,7 +168,10 @@ export const Game: React.FC = () => {
               });
           }
           const matchedSquish = getSquishmallow(card1.characterId);
-          setLearningEvent(buildLearningEvent(matchedSquish, 'match'));
+          const reviewEvent = buildLearningEvent(matchedSquish, 'match');
+          setReviewQueue(prev =>
+            prev.some(event => event.word === reviewEvent.word) ? prev : [...prev, reviewEvent]
+          );
 
           setMatchedIds(prev => [...prev, id1, id2]);
           setCards(prev => prev.map(c => (c.id === id1 || c.id === id2) ? { ...c, isMatched: true } : c));
@@ -169,9 +179,6 @@ export const Game: React.FC = () => {
         } else {
           // No match, flip back after delay
           soundManager.playMismatch();
-          const firstSquish = getSquishmallow(card1.characterId);
-          const secondSquish = getSquishmallow(card2.characterId);
-          setLearningEvent(buildLearningEvent(firstSquish, 'mismatch', secondSquish));
           const timer = setTimeout(() => {
             setCards(prev => prev.map(c => (c.id === id1 || c.id === id2) ? { ...c, isFlipped: false } : c));
             setFlippedIds([]);
@@ -210,6 +217,11 @@ export const Game: React.FC = () => {
     soundManager.speak(textToSpeak);
   }, [selectedSquish]);
 
+  useEffect(() => {
+    if (!shouldShowReview || !currentReviewEvent) return;
+    soundManager.speak(currentReviewEvent.sentence);
+  }, [shouldShowReview, currentReviewEvent]);
+
   const handleCardClick = (id: string) => {
     if (flippedIds.length >= 2 || isPaused || gameState !== GameState.PLAYING) return;
     
@@ -240,12 +252,6 @@ export const Game: React.FC = () => {
   };
 
   if (!worldId) return null;
-
-  const panelBorderClasses = learningEvent
-    ? learningEvent.type === 'match'
-      ? 'border-[#FFE9A8]'
-      : 'border-[#D2F7FF]'
-    : 'border-dashed border-gray-200';
 
   return (
     <div className="min-h-screen bg-[#CDEBFF] flex flex-col relative overflow-hidden">
@@ -279,63 +285,6 @@ export const Game: React.FC = () => {
             ))}
          </div>
       </main>
-
-      <section className="px-4 pb-8">
-        <div className="max-w-4xl mx-auto">
-          <div className={`bg-white/90 border-4 rounded-[2rem] p-6 shadow-lg transition-all ${panelBorderClasses}`}>
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.4em] text-gray-400 mb-1">
-                  {learningEvent
-                    ? learningEvent.type === 'match'
-                      ? 'Word Spotlight'
-                      : 'Spelling Reminder'
-                    : 'Word Builder'}
-                </p>
-                <h3 className="font-heading text-2xl text-[#6B4F3F] leading-snug">
-                  {learningEvent?.word || 'Flip cards to unlock new words'}
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {learningEvent
-                    ? 'Trace each letter and say it aloud to lock in the spelling.'
-                    : 'Keep matching to see playful hints and spelling tips.'}
-                </p>
-              </div>
-              {learningEvent && (
-                <Button
-                  variant="icon"
-                  onClick={() => soundManager.speak(learningEvent.word)}
-                  aria-label={`Hear ${learningEvent.word}`}
-                >
-                  <Volume2 size={20} />
-                </Button>
-              )}
-            </div>
-
-            {learningEvent ? (
-              <>
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {learningEvent.letters.map((letter, index) => (
-                    <span
-                      key={`${letter}-${index}`}
-                      className="px-3 py-2 text-lg font-bold rounded-2xl border border-[#D1D5DB] bg-white/70"
-                    >
-                      {letter}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-sm text-gray-700 mt-4">{learningEvent.hint}</p>
-                <p className="text-xs text-gray-400 mt-1">{learningEvent.sentence}</p>
-              </>
-            ) : (
-              <p className="text-sm text-gray-600 mt-4">
-                Each friend has a name hidden behind the cards. Match pairs to reveal pronunciations, hints,
-                and short sentences that make spelling stick.
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
 
       {/* Pause Modal */}
       {isPaused && (
@@ -417,6 +366,57 @@ export const Game: React.FC = () => {
                     </Button>
                 </div>
              </div>
+        </div>
+      )}
+
+      {shouldShowReview && currentReviewEvent && (
+        <div className="absolute inset-0 z-[70] bg-white/95 flex items-center justify-center p-6">
+          <div className="w-full max-w-lg bg-white border-[6px] border-[#FFE9A8] rounded-[2.5rem] p-6 shadow-2xl flex flex-col gap-4 text-center">
+            <p className="text-xs uppercase tracking-[0.45em] text-gray-400">Word Review</p>
+            <p className="text-sm text-gray-500">Step {currentReviewIndex + 1} of {reviewQueue.length}</p>
+            {currentReviewEvent.image && (
+              <div className="w-32 h-32 mx-auto">
+                <img
+                  src={currentReviewEvent.image}
+                  alt={currentReviewEvent.word}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
+            <h3 className="font-heading text-3xl text-[#6B4F3F]">{currentReviewEvent.word}</h3>
+            <div className="flex flex-wrap justify-center gap-2">
+              {currentReviewEvent.letters.map((letter, index) => (
+                <span
+                  key={`${letter}-${index}`}
+                  className="px-3 py-2 text-lg font-semibold rounded-2xl border border-[#D1D5DB] bg-[#FDF5EE] text-[#6B4F3F]"
+                >
+                  {letter}
+                </span>
+              ))}
+            </div>
+            <p className="text-sm text-gray-600">{currentReviewEvent.hint}</p>
+            <p className="text-sm text-gray-400 italic">{currentReviewEvent.sentence}</p>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                variant="icon"
+                onClick={() => soundManager.speak(currentReviewEvent.sentence)}
+                aria-label={`Hear sentence for ${currentReviewEvent.word}`}
+              >
+                <Volume2 size={20} />
+              </Button>
+              <span className="text-xs uppercase tracking-[0.4em] text-gray-400">Play Sentence</span>
+            </div>
+            <Button
+              variant="primary"
+              fullWidth
+              onClick={() => setCurrentReviewIndex(prev => prev + 1)}
+            >
+              {currentReviewIndex === reviewQueue.length - 1 ? 'Finish Review' : 'Next Word'}
+            </Button>
+            <p className="text-xs text-gray-400 px-4">
+              Listen along and say the word, then tap “{currentReviewIndex === reviewQueue.length - 1 ? 'Finish Review' : 'Next Word'}” to keep going.
+            </p>
+          </div>
         </div>
       )}
 
