@@ -14,6 +14,14 @@ const shuffle = <T,>(array: T[]): T[] => {
   return [...array].sort(() => Math.random() - 0.5);
 };
 
+const getAgeText = (squishmallow: Squishmallow) => {
+  if (!squishmallow.debutYear) return 'Age unknown';
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - squishmallow.debutYear;
+  if (age <= 0) return 'New this year!';
+  return `${age} year${age === 1 ? '' : 's'} old`;
+};
+
 export const Game: React.FC = () => {
   const { worldId } = useParams<{ worldId: string }>();
   const navigate = useNavigate();
@@ -139,6 +147,12 @@ export const Game: React.FC = () => {
     }
   }, [matchedIds, cards, newlyUnlocked]);
 
+  useEffect(() => {
+    if (!selectedSquish) return;
+    const textToSpeak = selectedSquish.bio || selectedSquish.description || selectedSquish.name;
+    soundManager.speak(textToSpeak);
+  }, [selectedSquish]);
+
   const handleCardClick = (id: string) => {
     if (flippedIds.length >= 2 || isPaused || gameState !== GameState.PLAYING) return;
     
@@ -227,28 +241,37 @@ export const Game: React.FC = () => {
              <div className="bg-white rounded-[2rem] p-8 w-full max-w-md flex flex-col items-center gap-6 shadow-2xl animate-in zoom-in-95 duration-500 max-h-[90vh] overflow-y-auto no-scrollbar">
                 
                 {newlyUnlocked.length > 0 ? (
-                    <div className="flex flex-col items-center gap-4 mb-2 w-full">
-                        <div className="w-20 h-20 bg-[#FFE9A8] rounded-full flex items-center justify-center shadow-inner animate-pulse">
-                            <Sparkles size={40} fill="#B48E25" stroke="none" />
+                    <div className="w-full flex flex-col items-center gap-4">
+                        <div className="w-full flex flex-col items-center gap-3 mb-2">
+                            <div className="w-20 h-20 bg-[#FFE9A8] rounded-full flex items-center justify-center shadow-inner animate-pulse">
+                                <Sparkles size={40} fill="#B48E25" stroke="none" />
+                            </div>
+                            <h2 className="font-heading text-3xl text-[#6B4F3F] text-center">New Friends Found!</h2>
+                            <p className="font-body text-sm text-gray-500 text-center px-4">
+                                Tap any friend to see their details and hear them say hello.
+                            </p>
                         </div>
-                        <h2 className="font-heading text-3xl text-[#6B4F3F] text-center">New Friends Found!</h2>
-                        
-                        {/* FULL LIST OF NEWLY UNLOCKED ITEMS */}
-                        <div className="flex gap-4 justify-center flex-wrap w-full">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full">
                             {newlyUnlocked.map((s, idx) => (
-                                <button 
-                                    key={`${s.id}-${idx}`} 
+                                <button
+                                    key={`${s.id}-${idx}`}
                                     onClick={() => setSelectedSquish(s)}
-                                    className="flex flex-col items-center gap-1 animate-bounce group" 
-                                    style={{ animationDuration: '2s', animationDelay: `${idx * 0.1}s` }}
+                                    className="group rounded-[32px] border border-white bg-white shadow-xl overflow-hidden focus:outline-none focus-visible:ring-4 focus-visible:ring-[#FFD6E8] transition-transform hover:-translate-y-1 active:translate-y-0"
+                                    aria-label={`View details for ${s.name}`}
+                                    style={{ animationDuration: '0.5s', animationDelay: `${idx * 0.05}s` }}
                                 >
-                                    <div className="w-24 h-24 rounded-2xl border-4 border-[#FFF] shadow-md overflow-hidden bg-white relative transition-transform group-hover:scale-110 group-active:scale-95">
-                                        <img src={s.image} alt={s.name} className="w-full h-full object-contain" />
-                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 flex items-center justify-center transition-colors">
-                                            <Info size={24} className="text-white opacity-0 group-hover:opacity-100 drop-shadow-md" />
+                                    <div className="relative w-full aspect-square bg-[#FDF7FF]">
+                                        <img src={s.image} alt={s.name} className="w-full h-full object-contain p-4" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-semibold text-[#6B4F3F] tracking-wide">
+                                            {getAgeText(s)}
                                         </div>
                                     </div>
-                                    <span className="font-heading font-bold text-[#6B4F3F] text-sm group-hover:text-[#FF8FAB]">{s.name}</span>
+                                    <div className="p-3 text-center">
+                                        <p className="font-heading text-base text-[#6B4F3F]">{s.name}</p>
+                                        <p className="text-xs uppercase tracking-[0.2em] text-gray-400 mt-1">{s.species || 'Best friend'}</p>
+                                        <p className="text-[11px] text-[#6B4F3F] mt-2">{getAgeText(s)}</p>
+                                    </div>
                                 </button>
                             ))}
                         </div>
@@ -301,6 +324,7 @@ export const Game: React.FC = () => {
                                 {selectedSquish.species}
                             </span>
                         )}
+                        <p className="text-sm text-gray-500 mt-1">{getAgeText(selectedSquish)}</p>
                      </div>
                      
                      {selectedSquish.squishdate && (

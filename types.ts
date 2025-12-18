@@ -7,6 +7,7 @@ export interface Squishmallow {
   squishdate?: string;
   species?: string;
   appearance?: string;
+  debutYear?: number;
   type: 'classic' | 'rare' | 'ultra-rare';
   primaryColor: string;
   unlocked: boolean; // Default unlocked state (for initialization)

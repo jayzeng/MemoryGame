@@ -29,6 +29,8 @@ export const MOCK_SQUISHMALLOWS: Squishmallow[] = rawData.map((item, index) => {
 
   // Cast item to any to access potential new fields from the JSON update mentioned by user
   const source = item as any;
+  const parsedYear = source.year ? Number.parseInt(String(source.year), 10) : NaN;
+  const debutYear = Number.isNaN(parsedYear) ? undefined : parsedYear;
 
   return {
     id: `sq_${index}_${item.name.replace(/\s/g, '')}`,
@@ -40,6 +42,7 @@ export const MOCK_SQUISHMALLOWS: Squishmallow[] = rawData.map((item, index) => {
     bio: source.bio,
     squishdate: source.squishdate,
     species: source.type, // Map JSON 'type' (e.g. Shark) to 'species' to avoid conflict with rarity 'type'
+    debutYear,
     appearance: source.appearance,
     type: type,
     primaryColor: 'pink', // Default placeholder
