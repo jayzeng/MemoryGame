@@ -9,6 +9,7 @@ import ReactConfetti from 'react-confetti';
 import { soundManager } from '../utils/SoundManager';
 import { storage } from '../utils/storage';
 import { getAgeText } from '../utils/squishmallowHelpers';
+import { useHoliday } from './HolidayContext';
 
 // Helper to shuffle array
 const shuffle = <T,>(array: T[]): T[] => {
@@ -137,6 +138,7 @@ const buildLearningEvent = (
 export const Game: React.FC = () => {
   const { worldId } = useParams<{ worldId: string }>();
   const navigate = useNavigate();
+  const { isHoliday } = useHoliday();
   const [cards, setCards] = useState<CardItem[]>([]);
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [flippedIds, setFlippedIds] = useState<string[]>([]);
@@ -338,7 +340,13 @@ export const Game: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#CDEBFF] flex flex-col relative overflow-hidden">
-      {showConfetti && <ReactConfetti numberOfPieces={200} recycle={false} />}
+      {showConfetti && (
+        <ReactConfetti
+          numberOfPieces={200}
+          recycle={false}
+          colors={isHoliday ? ['#E05858', '#4CC38A', '#FFE29A', '#FFFFFF'] : undefined}
+        />
+      )}
       
       {/* Top Bar */}
       <header className="px-6 py-4 flex items-center justify-between max-w-4xl mx-auto w-full z-10">

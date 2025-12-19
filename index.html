@@ -62,6 +62,111 @@
         animation: match-bounce 0.6s ease-out forwards;
         z-index: 10;
       }
+
+      /* Holiday Effects */
+      .holiday-glow {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 12% 12%, rgba(255, 214, 232, 0.55), transparent 55%),
+          radial-gradient(circle at 88% 18%, rgba(204, 255, 226, 0.5), transparent 52%),
+          linear-gradient(120deg, rgba(255, 230, 230, 0.4), rgba(210, 255, 230, 0.25));
+        opacity: 0.6;
+        z-index: 20;
+      }
+      .holiday-snow {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+        z-index: 25;
+      }
+      .holiday-snowflake {
+        position: absolute;
+        top: -10vh;
+        border-radius: 9999px;
+        background: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+        animation-name: snow-fall;
+        animation-timing-function: linear;
+        animation-iteration-count: infinite;
+      }
+      .holiday-lights {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 64px;
+        pointer-events: none;
+        z-index: 30;
+        background-image:
+          linear-gradient(transparent 26px, rgba(77, 53, 45, 0.35) 27px, transparent 28px),
+          radial-gradient(circle at 18px 34px, rgba(255, 199, 115, 0.9) 0 6px, transparent 7px),
+          radial-gradient(circle at 46px 32px, rgba(132, 255, 201, 0.9) 0 6px, transparent 7px),
+          radial-gradient(circle at 74px 34px, rgba(255, 132, 150, 0.9) 0 6px, transparent 7px);
+        background-size: 92px 64px;
+        background-repeat: repeat-x;
+        filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.12));
+      }
+      @keyframes snow-fall {
+        0% {
+          transform: translate3d(0, -10vh, 0);
+          opacity: 0;
+        }
+        15% {
+          opacity: 0.9;
+        }
+        100% {
+          transform: translate3d(var(--drift, 20px), 110vh, 0);
+          opacity: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .holiday-snowflake {
+          animation: none;
+        }
+        .holiday-glow {
+          opacity: 0.3;
+        }
+      }
+
+      .holiday-flip-burst {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 15;
+      }
+      .holiday-flip-burst span {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 7px;
+        height: 7px;
+        border-radius: 9999px;
+        background: var(--color, #ffffff);
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.9);
+        animation: holiday-burst 0.6s ease-out forwards;
+      }
+      @keyframes holiday-burst {
+        0% {
+          transform: translate(-50%, -50%) scale(0.6);
+          opacity: 0;
+        }
+        20% {
+          opacity: 1;
+        }
+        100% {
+          transform: translate(calc(-50% + var(--x, 0px)), calc(-50% + var(--y, 0px))) scale(1.4);
+          opacity: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .holiday-flip-burst span {
+          animation: none;
+          opacity: 0.5;
+        }
+      }
     </style>
   <script type="importmap">
 {

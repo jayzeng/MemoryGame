@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CardItem, Squishmallow } from '../types';
+import { useHoliday } from './HolidayContext';
 
 interface CardProps {
   item: CardItem;
@@ -9,6 +10,10 @@ interface CardProps {
 }
 
 export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disabled }) => {
+  const { isHoliday } = useHoliday();
+  const [showHolidayBurst, setShowHolidayBurst] = useState(false);
+  const prevFlipped = useRef(item.isFlipped);
+
   const handleClick = () => {
     if (!disabled && !item.isFlipped && !item.isMatched) {
       onClick(item.id);
@@ -23,6 +28,23 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
 
   const [imgSrc, setImgSrc] = useState(squishmallow.image);
   const handleImageError = () => setImgSrc(fallbackImage);
+
+  useEffect(() => {
+    if (!isHoliday) {
+      setShowHolidayBurst(false);
+    }
+  }, [isHoliday]);
+
+  useEffect(() => {
+    const wasFlipped = prevFlipped.current;
+    if (isHoliday && item.isFlipped && !wasFlipped) {
+      setShowHolidayBurst(true);
+      const timer = window.setTimeout(() => setShowHolidayBurst(false), 650);
+      prevFlipped.current = item.isFlipped;
+      return () => clearTimeout(timer);
+    }
+    prevFlipped.current = item.isFlipped;
+  }, [isHoliday, item.isFlipped]);
 
   return (
     <div 
@@ -70,6 +92,17 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
           )}
         </div>
       </div>
+
+      {showHolidayBurst && (
+        <div className="holiday-flip-burst" aria-hidden="true">
+          <span style={{ '--x': '-28px', '--y': '-18px', '--color': '#E05858' } as React.CSSProperties} />
+          <span style={{ '--x': '32px', '--y': '-10px', '--color': '#4CC38A' } as React.CSSProperties} />
+          <span style={{ '--x': '-18px', '--y': '24px', '--color': '#FFFFFF' } as React.CSSProperties} />
+          <span style={{ '--x': '20px', '--y': '28px', '--color': '#FFE29A' } as React.CSSProperties} />
+          <span style={{ '--x': '-36px', '--y': '6px', '--color': '#DDEFFF' } as React.CSSProperties} />
+          <span style={{ '--x': '8px', '--y': '-30px', '--color': '#FFFFFF' } as React.CSSProperties} />
+        </div>
+      )}
     </div>
   );
 };

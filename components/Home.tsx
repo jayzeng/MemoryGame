@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from './Button';
-import { Play, Book, Trophy, Edit2 } from 'lucide-react';
+import { Play, Book, Trophy, Edit2, Snowflake } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import type { Squishmallow } from '../types';
 import './Home.css';
+import { useHoliday } from './HolidayContext';
 
 const ORBIT_CONFIGS = [
   { radius: 180, size: 80, duration: 12, delay: '0s', borderColor: 'border-[#FFD6E8]/50' },
@@ -37,6 +38,7 @@ export const Home: React.FC = () => {
   const [floatingSquishmallows] = useState<Squishmallow[]>(() => getRandomSquishmallows(ORBIT_CONFIGS.length));
   const pauseTimers = useRef<Record<string, number>>({});
   const [pausedOrbitIds, setPausedOrbitIds] = useState<Record<string, boolean>>({});
+  const { isHoliday } = useHoliday();
 
   // Load initial state
   useEffect(() => {
@@ -149,6 +151,12 @@ export const Home: React.FC = () => {
       <div className="relative z-10 flex flex-col items-center justify-center gap-8 w-full">
         <div className="relative flex flex-col items-center gap-5 animate-in slide-in-from-top duration-700">
           <div className="relative z-10 flex flex-col items-center gap-3">
+            {isHoliday && (
+              <div className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-1 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[#B33A3A] shadow-md border border-white">
+                <Snowflake size={12} className="text-[#4AA76A]" />
+                Happy Holidays
+              </div>
+            )}
             <div className="relative">
               <div className="absolute -inset-5 rounded-[3rem] bg-gradient-to-br from-[#FFD6E8]/90 via-[#FF8FAB]/60 to-transparent opacity-75 blur-2xl" />
               <div className="relative bg-white p-6 rounded-[3rem] shadow-2xl border-4 border-[#FFD6E8] animate-dance origin-center">
