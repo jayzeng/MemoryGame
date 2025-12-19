@@ -89,18 +89,6 @@ export const Home: React.FC = () => {
     }, 2000);
   };
 
-  const resumeOrbit = (id: string) => {
-    if (pauseTimers.current[id]) {
-      clearTimeout(pauseTimers.current[id]!);
-      pauseTimers.current[id] = undefined;
-    }
-    setPausedOrbitIds((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  };
-
   const canPlay = Boolean(name.trim());
   const playLink = !isEditing && canPlay ? '/worlds' : undefined;
 
@@ -113,7 +101,7 @@ export const Home: React.FC = () => {
           return (
             <div key={squish.id} className="absolute inset-0 flex items-center justify-center">
               <span
-                className={`absolute rounded-full border ${config.borderColor} opacity-30`}
+                className={`absolute rounded-full border ${config.borderColor} opacity-30 pointer-events-none`}
                 style={{
                   width: `${config.radius * 2}px`,
                   height: `${config.radius * 2}px`,
@@ -134,7 +122,6 @@ export const Home: React.FC = () => {
                 >
                   <div
                     onMouseEnter={() => pauseOrbit(squish.id)}
-                    onMouseLeave={() => resumeOrbit(squish.id)}
                     className="flex flex-col items-center gap-1 pointer-events-auto"
                   >
                     <div

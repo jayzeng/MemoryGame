@@ -12,7 +12,76 @@ import { getAgeText } from '../utils/squishmallowHelpers';
 
 // Helper to shuffle array
 const shuffle = <T,>(array: T[]): T[] => {
-  return [...array].sort(() => Math.random() - 0.5);
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+const getColumnOptions = (count: number): number[] => {
+  if (count <= 12) return [3, 4];
+  if (count <= 16) return [4];
+  if (count <= 24) return [4, 6];
+  if (count <= 32) return [4, 7];
+  return [5, 8];
+};
+
+const getChebyshevDistance = (indexA: number, indexB: number, columns: number) => {
+  const rowA = Math.floor(indexA / columns);
+  const colA = indexA % columns;
+  const rowB = Math.floor(indexB / columns);
+  const colB = indexB % columns;
+  return Math.max(Math.abs(rowA - rowB), Math.abs(colA - colB));
+};
+
+const getMinPairDistance = (indexA: number, indexB: number, columnOptions: number[]) =>
+  Math.min(...columnOptions.map(columns => getChebyshevDistance(indexA, indexB, columns)));
+
+const scoreDeckSpread = (deck: CardItem[], columnOptions: number[]) => {
+  const positions = new Map<string, number[]>();
+
+  deck.forEach((card, index) => {
+    const list = positions.get(card.characterId) ?? [];
+    list.push(index);
+    positions.set(card.characterId, list);
+  });
+
+  let adjacentPairs = 0;
+  let distanceSum = 0;
+
+  positions.forEach(indices => {
+    if (indices.length < 2) return;
+    const [first, second] = indices;
+    const minDistance = getMinPairDistance(first, second, columnOptions);
+    distanceSum += minDistance;
+    if (minDistance <= 1) adjacentPairs += 1;
+  });
+
+  return { adjacentPairs, distanceSum };
+};
+
+const shuffleWithSpread = (deck: CardItem[], columnOptions: number[]) => {
+  const attempts = Math.max(40, deck.length * 3);
+  let best = shuffle(deck);
+  let bestScore = scoreDeckSpread(best, columnOptions);
+
+  for (let i = 0; i < attempts; i += 1) {
+    const candidate = shuffle(deck);
+    const score = scoreDeckSpread(candidate, columnOptions);
+
+    if (
+      score.adjacentPairs < bestScore.adjacentPairs ||
+      (score.adjacentPairs === bestScore.adjacentPairs &&
+        score.distanceSum > bestScore.distanceSum)
+    ) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return best;
 };
 
 type LearningEvent = {
@@ -119,7 +188,8 @@ export const Game: React.FC = () => {
       deck.push({ id: `${char.id}-b`, characterId: char.id, isFlipped: false, isMatched: false });
     });
 
-    setCards(shuffle(deck));
+    const columnOptions = getColumnOptions(deck.length);
+    setCards(shuffleWithSpread(deck, columnOptions));
     setFlippedIds([]);
     setMatchedIds([]);
     setNewlyUnlocked([]);
