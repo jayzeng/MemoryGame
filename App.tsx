@@ -7,20 +7,23 @@ import { Leaderboard } from './components/Leaderboard';
 import { Home } from './components/Home';
 import { HolidayProvider } from './components/HolidayContext';
 import { HolidayDecor } from './components/HolidayDecor';
+import { MultiplayerProvider } from './components/MultiplayerProvider';
 
 const App: React.FC = () => {
   return (
     <HolidayProvider>
       <HolidayDecor />
-      <Router>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/worlds" element={<WorldSelect />} />
-          <Route path="/game/:worldId" element={<Game />} />
-          <Route path="/book" element={<ParadeBook />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-        </Routes>
-      </Router>
+      <MultiplayerProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/worlds" element={<WorldSelect />} />
+            <Route path="/game/:worldId" element={<Game />} />
+            <Route path="/book" element={<ParadeBook />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
+          </Routes>
+        </Router>
+      </MultiplayerProvider>
     </HolidayProvider>
   );
 };

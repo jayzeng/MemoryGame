@@ -46,3 +46,25 @@ export interface LeaderboardEntry {
   count: number;
   date: string;
 }
+
+export interface LeaderboardPlayer {
+  name: string;
+  score: number;
+  lastUpdated: string;
+  giftsSent: number;
+  giftsReceived: number;
+  unlockedIds: string[];
+  profilePictureKey?: string;
+}
+
+export interface GiftRecord {
+  id: string;
+  from: string;
+  to: string;
+  message: string;
+  type: string;
+  createdAt: string;
+  squishId?: string;
+  squishName?: string;
+  squishImage?: string;
+}

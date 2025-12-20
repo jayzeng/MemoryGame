@@ -1,0 +1,16 @@
+name = "memorygame-multiplayer"
+compatibility_date = "2024-09-01"
+main = "src/index.ts"
+
+[durable_objects]
+bindings = [
+  { name = "LEADERBOARD_DO", class_name = "LeaderboardRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LeaderboardRoom"]
+
+[[r2_buckets]]
+binding = "PROFILE_PICS"
+bucket_name = "memorygame-profile-pics"

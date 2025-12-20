@@ -32,6 +32,14 @@ Try the deployed experience at https://jayzeng.github.io/MemoryGame/ to validate
 ## Gameplay & persistence
 Routes are defined in `App.tsx`: `/` for Home, `/worlds` for world selection, `/game/:worldId` for the board, `/book` for Parade Book, and `/leaderboard` for Top Collectors. The game tracks flipped cards, matches, unlocked Squishmallows, and leaderboards entirely in the browser, so progress carries across sessions as long as the same player name is entered.
 
+## Multiplayer backend
+- The leaderboard now connects to the Cloudflare Durable Object worker in `cloudflare/multiplayer`. The worker (see `docs/multiplayer-backend.md`) maintains a shared leaderboard, gift log, and WebSocket protocol for `join`, `score_update`, and `send_gift` messages.
+- Configure `VITE_MULTIPLAYER_WS_URL` (for example `wss://<name>.workers.dev/ws?room=memorygame`) inside `.env.local` so the React hook in `utils/multiplayer.ts` knows where to connect.
+- Run `npm install` inside `cloudflare/multiplayer`, then use `npx wrangler dev`/`npx wrangler publish` to test or deploy the worker. The frontend picks up live data as soon as the worker is reachable and the player has a name.
+- Unlock progress is synced in real time so the Durable Object persists each player’s `unlockedIds`, and gifting now transfers specific Squishmallows (the giver loses it while the recipient immediately sees it in their Parade Book).
+- The worker now exposes `/profile` and `/profile-picture`, which persist metadata to the Durable Object and store avatar files inside the `PROFILE_PICS` R2 bucket (`memorygame-profile-pics`). Create that bucket and binding (see `wrangler.toml`) before deploying so players can upload photos.
+- On the React side the Home view derives the HTTP base URL from `VITE_MULTIPLAYER_WS_URL` (override with `VITE_PROFILE_API_BASE` if necessary) and can fetch/upload profile pictures before a player taps Play.
+
 ## Data & tooling
 - Squishmallow metadata comes from `squishmallows.json` via `squishmallowsData.ts`. The constants file transforms that data into `MOCK_SQUISHMALLOWS`, attaches rarity tiers, and seeds worlds with branded colors.
 - `utils/storage.ts` handles player names, unlock state (per sanitized name), and leaderboard updates.

@@ -1,12 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from './Button';
-import { Play, Book, Trophy, Edit2, Snowflake } from 'lucide-react';
+import { Play, Book, Trophy, Edit2, Snowflake, Camera } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import type { Squishmallow } from '../types';
 import './Home.css';
 import { useHoliday } from './HolidayContext';
+import {
+  buildProfilePictureUrl,
+  fetchPlayerProfile,
+  getProfileApiBase,
+  uploadProfilePicture,
+} from '../utils/profile';
 
 const ORBIT_CONFIGS = [
   { radius: 180, size: 80, duration: 12, delay: '0s', borderColor: 'border-[#FFD6E8]/50' },
@@ -39,6 +45,18 @@ export const Home: React.FC = () => {
   const pauseTimers = useRef<Record<string, number>>({});
   const [pausedOrbitIds, setPausedOrbitIds] = useState<Record<string, boolean>>({});
   const { isHoliday } = useHoliday();
+  const profileApiBase = useMemo(() => getProfileApiBase(), []);
+  const [profilePictureKey, setProfilePictureKey] = useState<string | null>(null);
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoFeedback, setPhotoFeedback] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [cameraSupported, setCameraSupported] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
 
   // Load initial state
   useEffect(() => {
@@ -61,6 +79,78 @@ export const Home: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  useEffect(() => {
+    setCameraSupported(
+      typeof navigator !== 'undefined' &&
+        typeof navigator.mediaDevices !== 'undefined' &&
+        typeof navigator.mediaDevices.getUserMedia === 'function'
+    );
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      const mobileRegex =
+        /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+      setIsMobileDevice(mobileRegex.test(navigator.userAgent));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!profileApiBase) {
+      setProfilePictureKey(null);
+      return;
+    }
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setProfilePictureKey(null);
+      return;
+    }
+    let isCancelled = false;
+    fetchPlayerProfile(profileApiBase, trimmed)
+      .then((result) => {
+        if (isCancelled) return;
+        setProfilePictureKey(result.profilePictureKey ?? null);
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setProfilePictureKey(null);
+        }
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [name, profileApiBase]);
+
+  useEffect(() => {
+    if (!profilePictureKey || !profileApiBase) {
+      setProfilePictureUrl(null);
+      return;
+    }
+    setProfilePictureUrl(buildProfilePictureUrl(profileApiBase, profilePictureKey));
+  }, [profilePictureKey, profileApiBase]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   const refreshCount = () => {
     setCollectedCount(storage.getUnlockedIds().length);
   };
@@ -74,6 +164,120 @@ export const Home: React.FC = () => {
 
     storage.updateLeaderboard();
     refreshCount();
+  };
+
+  const ensurePhotoPrerequisites = () => {
+    if (!name.trim()) {
+      setPhotoFeedback('Save your name before capturing a photo.');
+      return false;
+    }
+    if (!profileApiBase) {
+      setPhotoFeedback('Enable the multiplayer backend before uploading photos.');
+      return false;
+    }
+    return true;
+  };
+
+  const handlePhotoFile = async (file: File) => {
+    if (!profileApiBase) return;
+    let preview: string | null = null;
+    setPhotoFeedback(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    preview = URL.createObjectURL(file);
+    setPreviewUrl(preview);
+    setIsUploadingPhoto(true);
+    let success = false;
+    try {
+      const result = await uploadProfilePicture(profileApiBase, name.trim(), file);
+      if (result.profilePictureKey) {
+        setProfilePictureKey(result.profilePictureKey);
+        setPhotoFeedback('Profile photo saved!');
+        success = true;
+      }
+    } catch (error) {
+      console.error(error);
+      setPhotoFeedback('Unable to save the photo—please try again.');
+    } finally {
+      setIsUploadingPhoto(false);
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+      if (!success) {
+        setPreviewUrl(null);
+      }
+    }
+  };
+
+  const handlePhotoSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!ensurePhotoPrerequisites()) {
+      return;
+    }
+    await handlePhotoFile(file);
+  };
+
+  const openPhotoPicker = () => {
+    if (!ensurePhotoPrerequisites()) return;
+    fileInputRef.current?.click();
+  };
+
+  const closeCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+    }
+    setCameraStream(null);
+    setIsCameraOpen(false);
+  };
+
+  const openCamera = async () => {
+    if (!ensurePhotoPrerequisites()) {
+      return;
+    }
+    if (!cameraSupported) {
+      setPhotoFeedback('Camera capture is not supported in this browser.');
+      return;
+    }
+    setPhotoFeedback(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      setCameraStream(stream);
+      setIsCameraOpen(true);
+    } catch (error) {
+      console.error('Camera access failed', error);
+      setPhotoFeedback('Unable to access the camera.');
+      closeCamera();
+    }
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setPhotoFeedback('Unable to capture the photo.');
+      return;
+    }
+    ctx.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) {
+      setPhotoFeedback('Unable to capture the photo.');
+      return;
+    }
+    const file = new File([blob], 'camera-photo.png', { type: blob.type || 'image/png' });
+    try {
+      await handlePhotoFile(file);
+    } finally {
+      closeCamera();
+    }
   };
 
   const pauseOrbit = (id: string) => {
@@ -93,6 +297,9 @@ export const Home: React.FC = () => {
 
   const canPlay = Boolean(name.trim());
   const playLink = !isEditing && canPlay ? '/worlds' : undefined;
+  const avatarUrl = previewUrl || profilePictureUrl;
+  const showCameraButton = cameraSupported && !isMobileDevice;
+  const showUploadButton = isMobileDevice || !cameraSupported;
 
   return (
     <div className="relative min-h-screen bg-[#CDEBFF] flex flex-col items-center justify-center p-6 text-center gap-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
@@ -174,7 +381,25 @@ export const Home: React.FC = () => {
         </div>
 
         <div className="w-full max-w-sm bg-white/80 backdrop-blur-sm rounded-3xl p-6 shadow-lg border-4 border-white animate-in zoom-in duration-500 animate-float" style={{ animationDelay: '1s' }}>
-          <div className="flex flex-col items-center gap-3 mb-4">
+        <div className="flex flex-col items-center gap-3 mb-4">
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative">
+              <div className="w-24 h-24 md:w-28 md:h-28 rounded-full border-4 border-white bg-white/80 shadow-2xl overflow-hidden flex items-center justify-center">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={name ? `${name}'s profile photo` : 'Profile photo'}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center px-3 text-center">
+                    <span className="text-[0.55rem] tracking-[0.4em] uppercase text-[#B48E25]">Add</span>
+                    <span className="text-[0.65rem] tracking-[0.3em] uppercase text-[#B48E25]">photo</span>
+                  </div>
+                )}
+              </div>
+            </div>
             {isEditing ? (
               <form className="flex gap-2 w-full" onSubmit={handleSaveName}>
                 <input
@@ -195,14 +420,99 @@ export const Home: React.FC = () => {
                 </Button>
               </form>
             ) : (
-              <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setIsEditing(true)}>
+              <div
+                className="flex items-center gap-2 group cursor-pointer"
+                onClick={() => setIsEditing(true)}
+              >
                 <h2 className="font-heading text-2xl text-[#6B4F3F]">Hi, {name}!</h2>
                 <Edit2 size={16} className="opacity-0 group-hover:opacity-50" />
               </div>
             )}
+            {(showUploadButton || showCameraButton) && (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2">
+                  {showUploadButton && (
+                    <button
+                      type="button"
+                      onClick={openPhotoPicker}
+                      disabled={isUploadingPhoto || !name.trim() || !profileApiBase}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-2 text-[0.7rem] font-heading font-bold uppercase tracking-[0.4em] text-[#6B4F3F] shadow-lg transition duration-200 hover:border-[#FF8FAB] disabled:opacity-40 disabled:hover:border-white"
+                    >
+                      <Camera size={16} />
+                      {isUploadingPhoto ? 'Saving...' : 'Upload photo'}
+                    </button>
+                  )}
+                  {showCameraButton && (
+                    <button
+                      type="button"
+                      onClick={openCamera}
+                      disabled={isUploadingPhoto}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#DCCBFF] bg-[#DCCBFF]/60 px-4 py-2 text-[0.7rem] font-heading font-bold uppercase tracking-[0.4em] text-[#6B4F3F] shadow-lg transition duration-200 hover:border-[#B0A2FF] disabled:opacity-40 disabled:hover:border-[#DCCBFF]"
+                    >
+                      Camera
+                    </button>
+                  )}
+                </div>
+                {photoFeedback && (
+                  <p className="text-[0.65rem] text-[#6B4F3F]/70">{photoFeedback}</p>
+                )}
+                {!profileApiBase && (
+                  <p className="text-[0.65rem] text-[#6B4F3F]/60">
+                    Multiplayer backend required for photo uploads.
+                  </p>
+                )}
+                {!isMobileDevice && !cameraSupported && (
+                  <p className="text-[0.65rem] text-[#6B4F3F]/60">
+                    Live camera capture is available only on supported browsers.
+                  </p>
+                )}
+              </div>
+            )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handlePhotoSelection}
+              />
           </div>
+        </div>
+        {isCameraOpen && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-md rounded-[2rem] bg-white/95 p-4 shadow-2xl space-y-4">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full rounded-[1.5rem] bg-black"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  disabled={isUploadingPhoto}
+                  className="flex-1 rounded-full bg-[#FFD6E8] px-4 py-3 text-[0.8rem] font-heading font-bold uppercase tracking-[0.3em] text-[#6B4F3F] shadow-lg transition duration-200 hover:bg-[#ffc2dd] disabled:opacity-40"
+                >
+                  {isUploadingPhoto ? 'Saving…' : 'Take photo'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeCamera}
+                  className="flex-1 rounded-full border border-[#DCCBFF] bg-white px-4 py-3 text-[0.8rem] font-heading font-bold uppercase tracking-[0.3em] text-[#6B4F3F] shadow-lg transition duration-200 hover:border-[#6B4F3F]"
+                >
+                  Cancel
+                </button>
+              </div>
+              <p className="text-[0.65rem] text-[#6B4F3F]/60">
+                Use your device camera to take a cozy profile shot.
+              </p>
+            </div>
+          </div>
+        )}
 
-          <div className="bg-[#FFF] rounded-2xl p-4 border-2 border-[#E6E6E6]">
+        <div className="bg-[#FFF] rounded-2xl p-4 border-2 border-[#E6E6E6]">
             <p className="font-body text-[#6B4F3F] text-sm uppercase font-bold tracking-wider mb-1">Collection</p>
             <div className="flex items-end justify-center gap-2">
               <span className="font-heading text-4xl text-[#FF8FAB]">{collectedCount}</span>

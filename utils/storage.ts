@@ -7,6 +7,16 @@ const KEYS = {
   LEADERBOARD: 'sm_leaderboard',
 };
 
+export const PLAYER_NAME_EVENT = 'sm:player-name-changed';
+
+export const SCORE_UPDATE_EVENT = 'sm:score-updated';
+
+const dispatchScoreUpdate = (name: string, count: number, unlocked: string[]) => {
+  if (typeof window === 'undefined') return;
+  const detail = { name, count, unlocked };
+  window.dispatchEvent(new CustomEvent(SCORE_UPDATE_EVENT, { detail }));
+};
+
 export const storage = {
   getPlayerName: (): string => {
     return localStorage.getItem(KEYS.PLAYER_NAME) || '';
@@ -14,6 +24,9 @@ export const storage = {
 
   setPlayerName: (name: string) => {
     localStorage.setItem(KEYS.PLAYER_NAME, name);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(PLAYER_NAME_EVENT, { detail: name }));
+    }
   },
 
   // Helper to generate a unique key for the user
@@ -53,6 +66,17 @@ export const storage = {
     }
   },
 
+  revokeSquishmallow: (id: string) => {
+    const key = storage._getUserKey();
+    const ids = storage.getUnlockedIds();
+    const filtered = ids.filter((value) => value !== id);
+
+    if (filtered.length === ids.length) return;
+
+    localStorage.setItem(key, JSON.stringify(filtered));
+    storage.updateLeaderboard();
+  },
+
   isUnlocked: (id: string): boolean => {
     const ids = storage.getUnlockedIds();
     return ids.includes(id);
@@ -88,5 +112,7 @@ export const storage = {
     board = board.slice(0, 10);
 
     localStorage.setItem(KEYS.LEADERBOARD, JSON.stringify(board));
+
+    dispatchScoreUpdate(name, count, storage.getUnlockedIds());
   }
 };

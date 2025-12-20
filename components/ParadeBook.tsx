@@ -3,14 +3,27 @@ import { MOCK_SQUISHMALLOWS } from '../constants';
 import { Button } from './Button';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Lock, Heart, Star, Sparkles, Volume2, X } from 'lucide-react';
-import { storage } from '../utils/storage';
+import { SCORE_UPDATE_EVENT, storage } from '../utils/storage';
 import { Squishmallow } from '../types';
 import { soundManager } from '../utils/SoundManager';
 import { getAgeText } from '../utils/squishmallowHelpers';
+import { useMultiplayer } from './MultiplayerProvider';
 
 export const ParadeBook: React.FC = () => {
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
   const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
+  const [giftNote, setGiftNote] = useState('');
+  const [giftFeedback, setGiftFeedback] = useState<string | null>(null);
+  const [selectedRecipient, setSelectedRecipient] = useState('');
+  const playerName = storage.getPlayerName();
+  const {
+    players,
+    connected,
+    error,
+    sendGift: sendGiftToPlayer,
+    incomingGift,
+    dismissIncomingGift,
+  } = useMultiplayer();
 
   useEffect(() => {
     setUnlockedIds(storage.getUnlockedIds());
@@ -69,6 +82,29 @@ export const ParadeBook: React.FC = () => {
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [selectedSquish, closeDetailsModal]);
+
+  useEffect(() => {
+    const listener = () => setUnlockedIds(storage.getUnlockedIds());
+    window.addEventListener(SCORE_UPDATE_EVENT, listener as EventListener);
+    return () => window.removeEventListener(SCORE_UPDATE_EVENT, listener as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const candidates = players.filter((player) => player.name !== playerName).map((player) => player.name);
+    if (!candidates.length) {
+      setSelectedRecipient('');
+      return;
+    }
+    setSelectedRecipient((prev) => (candidates.includes(prev) ? prev : candidates[0]));
+  }, [players, playerName]);
+
+  useEffect(() => {
+    if (!incomingGift?.squishId) return;
+    const received = MOCK_SQUISHMALLOWS.find((squish) => squish.id === incomingGift.squishId);
+    if (received) {
+      setSelectedSquish(received);
+    }
+  }, [incomingGift]);
 
   return (
     <div className="min-h-screen bg-[#FFFBEB] p-6 pb-24">
@@ -184,6 +220,80 @@ export const ParadeBook: React.FC = () => {
               </div>
             </div>
 
+            {playerName && (
+              <div className="bg-white/80 rounded-2xl p-4 border border-[#FFE9A8] shadow-sm flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-heading text-lg text-[#6B4F3F]">Gift this Squishmallow</h4>
+                  <span className={`text-xs ${connected ? 'text-emerald-500' : 'text-gray-400'}`}>
+                    {connected ? 'Live' : 'Offline'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#6B4F3F]/70">
+                  Choose another collector and send a little kindness. Kind note is optional.
+                </p>
+
+                <select
+                  value={selectedRecipient}
+                  onChange={(event) => setSelectedRecipient(event.target.value)}
+                  disabled={!players.length}
+                  className="border border-[#DCCBFF] rounded-2xl px-4 py-3 font-heading text-sm text-[#6B4F3F] focus:outline-none focus:border-[#6B4F3F]"
+                >
+                  <option value="">{players.length ? 'Choose a friend' : 'No other players yet'}</option>
+                  {players
+                    .filter((player) => player.name !== playerName)
+                    .map((player) => (
+                      <option key={player.name} value={player.name}>
+                        {player.name}
+                      </option>
+                    ))}
+                </select>
+
+                <textarea
+                  value={giftNote}
+                  onChange={(event) => setGiftNote(event.target.value)}
+                  rows={3}
+                  placeholder="Say something sweet (optional)"
+                  className="border border-[#DCCBFF] rounded-2xl px-4 py-3 font-body text-sm text-[#6B4F3F] focus:outline-none focus:border-[#6B4F3F]"
+                />
+
+                <Button
+                  variant="primary"
+                  className="w-full rounded-2xl"
+                  onClick={() => {
+                    if (!selectedRecipient) {
+                      setGiftFeedback('Pick someone to receive this gift.');
+                      return;
+                    }
+                    if (!connected) {
+                      setGiftFeedback('Still connecting—please wait a moment.');
+                      return;
+                    }
+                    const success = sendGiftToPlayer({
+                      to: selectedRecipient,
+                      message: giftNote.trim(),
+                      giftType: 'sparkles',
+                      squish: {
+                        id: selectedSquish.id,
+                        name: selectedSquish.name,
+                        image: selectedSquish.image,
+                      },
+                    });
+                    if (!success) {
+                      setGiftFeedback('Can’t send right now—try again when the leaderboard reconnects.');
+                      return;
+                    }
+                    setGiftFeedback('Gift sent! ✨');
+                    setGiftNote('');
+                  }}
+                  disabled={!connected || !players.length}
+                >
+                  {connected ? 'Send gift' : 'Waiting for connection'}
+                </Button>
+                {giftFeedback && <p className="text-xs text-[#6B4F3F]">{giftFeedback}</p>}
+                {error && <p className="text-[0.6rem] text-red-500">{error}</p>}
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-4">
               <Button
                 variant="icon"
@@ -199,6 +309,35 @@ export const ParadeBook: React.FC = () => {
                 Close
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+      {incomingGift && incomingGift.squishId && (
+        <div className="fixed bottom-6 right-6 z-50 flex max-w-sm flex-col gap-3 rounded-3xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            {incomingGift.squishImage && (
+              <img
+                src={incomingGift.squishImage}
+                alt={incomingGift.squishName ?? 'gifted squishmallow'}
+                className="h-12 w-12 rounded-2xl object-cover"
+              />
+            )}
+            <div>
+              <p className="font-heading text-sm text-[#6B4F3F] font-bold">
+                You received {incomingGift.squishName ?? 'a gift'}!
+              </p>
+              <p className="text-[0.7rem] text-[#6B4F3F]/70">
+                From {incomingGift.from}
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-[#6B4F3F]/70 italic">
+            {incomingGift.message || 'Someone in the parade shared a friend.'}
+          </p>
+          <div className="flex justify-end">
+            <Button variant="secondary" className="text-[0.7rem]" onClick={dismissIncomingGift}>
+              Thanks!
+            </Button>
           </div>
         </div>
       )}

@@ -1,0 +1,8 @@
+{
+  "name": "memorygame-multiplayer",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.2024.0"
+  }
+}
