@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import { Button } from './Button';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Lock, Heart, Star, Sparkles, Volume2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Lock, Star, Sparkles, Volume2, X } from 'lucide-react';
 import { SCORE_UPDATE_EVENT, storage } from '../utils/storage';
 import { Squishmallow } from '../types';
 import { soundManager } from '../utils/SoundManager';
@@ -12,9 +12,13 @@ import { useMultiplayer } from './MultiplayerProvider';
 const INITIAL_RENDER_COUNT = 72;
 const LOAD_MORE_BATCH = 48;
 const SCROLL_BUFFER_PX = 600;
+const SCROLL_TOP_THRESHOLD = 240;
 
 export const ParadeBook: React.FC = () => {
+  type FilterOption = 'all' | 'unlocked' | 'locked' | 'rare' | 'ultra-rare' | 'classic';
+
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
+  const [newGiftedIds, setNewGiftedIds] = useState<string[]>([]);
   const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
   const [giftNote, setGiftNote] = useState('');
   const [giftFeedback, setGiftFeedback] = useState<string | null>(null);
@@ -22,6 +26,8 @@ export const ParadeBook: React.FC = () => {
   const [visibleCount, setVisibleCount] = useState(
     Math.min(INITIAL_RENDER_COUNT, MOCK_SQUISHMALLOWS.length)
   );
+  const [filter, setFilter] = useState<FilterOption>('all');
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const playerName = storage.getPlayerName();
   const {
     players,
@@ -53,9 +59,28 @@ export const ParadeBook: React.FC = () => {
     return [...unlocked, ...locked];
   }, [collection, unlockedIds]);
 
+  const filteredCollection = useMemo(() => {
+    switch (filter) {
+      case 'unlocked':
+        return sortedCollection.filter((squish) => unlockedIds.includes(squish.id));
+      case 'locked':
+        return sortedCollection.filter((squish) => !unlockedIds.includes(squish.id));
+      case 'rare':
+        return sortedCollection.filter((squish) => squish.type === 'rare');
+      case 'ultra-rare':
+        return sortedCollection.filter((squish) => squish.type === 'ultra-rare');
+      case 'classic':
+        return sortedCollection.filter(
+          (squish) => squish.type !== 'rare' && squish.type !== 'ultra-rare'
+        );
+      default:
+        return sortedCollection;
+    }
+  }, [filter, sortedCollection, unlockedIds]);
+
   const visibleCollection = useMemo(
-    () => sortedCollection.slice(0, Math.min(visibleCount, sortedCollection.length)),
-    [sortedCollection, visibleCount]
+    () => filteredCollection.slice(0, Math.min(visibleCount, filteredCollection.length)),
+    [filteredCollection, visibleCount]
   );
 
   const leaderboardStats = useMemo(() => {
@@ -131,6 +156,11 @@ export const ParadeBook: React.FC = () => {
     setSelectedSquish(null);
   }, []);
 
+  const handleSelectSquish = useCallback((squish: Squishmallow) => {
+    setSelectedSquish(squish);
+    setNewGiftedIds((prev) => prev.filter((id) => id !== squish.id));
+  }, []);
+
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -179,11 +209,15 @@ export const ParadeBook: React.FC = () => {
           document.body.offsetHeight - SCROLL_BUFFER_PX;
         if (nearBottom) {
           setVisibleCount((current) =>
-            current >= sortedCollection.length
+            current >= filteredCollection.length
               ? current
-              : Math.min(sortedCollection.length, current + LOAD_MORE_BATCH)
+              : Math.min(filteredCollection.length, current + LOAD_MORE_BATCH)
           );
         }
+        setShowScrollTop((shouldShow) => {
+          const scrolledPastThreshold = window.scrollY > SCROLL_TOP_THRESHOLD;
+          return shouldShow === scrolledPastThreshold ? shouldShow : scrolledPastThreshold;
+        });
         ticking = false;
       });
     };
@@ -191,7 +225,14 @@ export const ParadeBook: React.FC = () => {
     maybeLoadMore(); // Kick off initial load based on viewport height.
     window.addEventListener('scroll', maybeLoadMore, { passive: true });
     return () => window.removeEventListener('scroll', maybeLoadMore);
-  }, [sortedCollection.length]);
+  }, [filteredCollection.length]);
+
+  useEffect(() => {
+    setVisibleCount((current) => {
+      const next = Math.min(INITIAL_RENDER_COUNT, filteredCollection.length);
+      return current === next ? current : next;
+    });
+  }, [filter, filteredCollection.length]);
 
   return (
     <div className="min-h-screen bg-[#FFFBEB] p-6 pb-24">
@@ -210,6 +251,29 @@ export const ParadeBook: React.FC = () => {
             </div>
             <div className="w-12" /> {/* Spacer for balance */}
         </header>
+
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {([
+            { value: 'all', label: 'All' },
+            { value: 'unlocked', label: 'Unlocked' },
+            { value: 'locked', label: 'Locked' },
+            { value: 'rare', label: 'Rare' },
+            { value: 'ultra-rare', label: 'Ultra Rare' },
+            { value: 'classic', label: 'Classic' },
+          ] as const).map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setFilter(option.value)}
+              className={`px-4 py-2 rounded-full text-sm font-heading font-bold uppercase tracking-wide border transition-colors ${
+                filter === option.value
+                  ? 'bg-[#FFD6E8] border-[#ffb3d4] text-[#6B4F3F]'
+                  : 'bg-white border-[#E6E6E6] text-[#6B4F3F]/70 hover:text-[#6B4F3F]'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
         <div className="mb-6 grid gap-4 md:grid-cols-10">
           <section className="bg-white/90 rounded-2xl shadow-sm p-4 border border-white/70 md:col-span-7">
@@ -504,6 +568,16 @@ export const ParadeBook: React.FC = () => {
             </Button>
           </div>
         </div>
+      )}
+      {showScrollTop && (
+        <Button
+          variant="primary"
+          className="fixed bottom-6 right-6 z-40 rounded-full shadow-lg"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Scroll back to the top"
+        >
+          <ArrowUp size={18} />
+        </Button>
       )}
     </div>
   );
