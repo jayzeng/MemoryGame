@@ -9,12 +9,19 @@ import { soundManager } from '../utils/SoundManager';
 import { getAgeText } from '../utils/squishmallowHelpers';
 import { useMultiplayer } from './MultiplayerProvider';
 
+const INITIAL_RENDER_COUNT = 72;
+const LOAD_MORE_BATCH = 48;
+const SCROLL_BUFFER_PX = 600;
+
 export const ParadeBook: React.FC = () => {
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
   const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
   const [giftNote, setGiftNote] = useState('');
   const [giftFeedback, setGiftFeedback] = useState<string | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState('');
+  const [visibleCount, setVisibleCount] = useState(
+    Math.min(INITIAL_RENDER_COUNT, MOCK_SQUISHMALLOWS.length)
+  );
   const playerName = storage.getPlayerName();
   const {
     players,
@@ -45,6 +52,11 @@ export const ParadeBook: React.FC = () => {
     const locked = collection.filter((squish) => !unlockedIds.includes(squish.id));
     return [...unlocked, ...locked];
   }, [collection, unlockedIds]);
+
+  const visibleCollection = useMemo(
+    () => sortedCollection.slice(0, Math.min(visibleCount, sortedCollection.length)),
+    [sortedCollection, visibleCount]
+  );
 
   const leaderboardStats = useMemo(() => {
     const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -156,6 +168,31 @@ export const ParadeBook: React.FC = () => {
     }
   }, [incomingGift]);
 
+  useEffect(() => {
+    let ticking = false;
+    const maybeLoadMore = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const nearBottom =
+          window.innerHeight + window.scrollY >=
+          document.body.offsetHeight - SCROLL_BUFFER_PX;
+        if (nearBottom) {
+          setVisibleCount((current) =>
+            current >= sortedCollection.length
+              ? current
+              : Math.min(sortedCollection.length, current + LOAD_MORE_BATCH)
+          );
+        }
+        ticking = false;
+      });
+    };
+
+    maybeLoadMore(); // Kick off initial load based on viewport height.
+    window.addEventListener('scroll', maybeLoadMore, { passive: true });
+    return () => window.removeEventListener('scroll', maybeLoadMore);
+  }, [sortedCollection.length]);
+
   return (
     <div className="min-h-screen bg-[#FFFBEB] p-6 pb-24">
       <div className="max-w-3xl mx-auto">
@@ -218,7 +255,7 @@ export const ParadeBook: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {sortedCollection.map((squish) => {
+          {visibleCollection.map((squish) => {
                 const isUnlocked = unlockedIds.includes(squish.id);
                 return (
                   <div key={squish.id} className="flex flex-col items-center gap-2 group">
@@ -237,7 +274,13 @@ export const ParadeBook: React.FC = () => {
                       >
                           {isUnlocked ? (
                               <>
-                                  <img src={squish.image} alt={squish.name} className="w-full h-full object-cover" />
+                                  <img
+                                    src={squish.image}
+                                    alt={squish.name}
+                                    loading="lazy"
+                                    decoding="async"
+                                    className="w-full h-full object-cover"
+                                  />
                                   <div className="absolute bottom-0 w-full bg-white/90 p-2 text-center backdrop-blur-sm">
                                       <div className="flex items-center justify-between gap-2">
                                         <p className="font-heading font-bold text-sm truncate text-[#6B4F3F]">{squish.name}</p>
@@ -254,6 +297,8 @@ export const ParadeBook: React.FC = () => {
                                 <img
                                   src={squish.image}
                                   alt={squish.name}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="absolute inset-0 h-full w-full object-cover opacity-25"
                                   aria-hidden
                                 />
@@ -432,7 +477,7 @@ export const ParadeBook: React.FC = () => {
         </div>
       )}
       {incomingGift && incomingGift.squishId && (
-        <div className="fixed bottom-6 right-6 z-50 flex max-w-sm flex-col gap-3 rounded-3xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur-xl">
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 z-50 mx-auto sm:mx-0 flex max-w-md sm:max-w-sm flex-col gap-3 rounded-3xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-3">
             {incomingGift.squishImage && (
               <img

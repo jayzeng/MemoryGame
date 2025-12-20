@@ -457,22 +457,14 @@ export const Game: React.FC = () => {
   };
 
 
-  // Dynamic Grid Styling based on card count
-  const getGridClass = () => {
-    const count = cards.length;
-    // Mobile first, then tablet/desktop
-    if (count <= 12) return 'grid-cols-3 md:grid-cols-4 max-w-md'; 
-    if (count <= 16) return 'grid-cols-4 max-w-lg'; 
-    if (count <= 24) return 'grid-cols-4 md:grid-cols-6 max-w-2xl';
-    if (count <= 32) return 'grid-cols-4 md:grid-cols-7 max-w-3xl'; // 28 cards
-    return 'grid-cols-5 md:grid-cols-8 max-w-5xl'; // 36-40 cards
-  };
-
   if (!worldId) return null;
 
-  const boardGridClass = `grid ${getGridClass()} gap-3 w-full mx-auto pb-4 transition-all duration-300 ${
+  const boardGridClass = `grid gap-3 sm:gap-4 w-full max-w-6xl mx-auto pb-4 transition-all duration-300 ${
     reshuffleEffect ? 'animate-pulse shadow-[0_0_45px_rgba(255,229,168,0.65)]' : ''
   }`;
+  const boardGridStyle = {
+    gridTemplateColumns: 'repeat(auto-fit, minmax(clamp(100px, 18vw, 150px), 1fr))',
+  };
 
   return (
     <div className="min-h-screen bg-[#CDEBFF] flex flex-col relative overflow-hidden">
@@ -485,8 +477,8 @@ export const Game: React.FC = () => {
       )}
       
       {/* Top Bar */}
-      <header className="px-6 py-4 flex items-center justify-between max-w-4xl mx-auto w-full z-10">
-         <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm">
+      <header className="px-4 sm:px-6 py-4 flex items-center justify-between max-w-6xl mx-auto w-full z-10">
+         <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm text-sm sm:text-base">
             <Star className="text-[#FFE9A8]" fill="#FFE9A8" />
             <span className="font-heading font-bold text-[#6B4F3F]">{Math.floor(matchedIds.length / 2)} / {cards.length / 2}</span>
          </div>
@@ -499,8 +491,8 @@ export const Game: React.FC = () => {
       </header>
 
       {/* Game Board */}
-      <main className="flex-1 p-4 flex items-center justify-center overflow-y-auto">
-         <div className={boardGridClass}>
+      <main className="flex-1 px-3 sm:px-6 pb-6 flex items-start justify-center overflow-y-auto">
+         <div className={boardGridClass} style={boardGridStyle}>
             {cards.map(card => (
                 <Card 
                   key={card.id} 
@@ -516,7 +508,7 @@ export const Game: React.FC = () => {
       {/* Pause Modal */}
       {isPaused && (
         <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6">
-            <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm flex flex-col gap-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-[2rem] p-6 sm:p-8 w-full max-w-sm flex flex-col gap-4 shadow-2xl animate-in zoom-in-95 duration-200">
                 <h2 className="text-center font-heading text-3xl text-[#6B4F3F] mb-2">Paused</h2>
                 <Button variant="primary" fullWidth onClick={() => setIsPaused(false)}>
                     <Play size={20} /> Resume
@@ -550,8 +542,8 @@ export const Game: React.FC = () => {
 
       {/* Win Modal */}
       {gameState === GameState.COMPLETED && (
-        <div className="absolute inset-0 z-50 bg-[#CFF3E2]/90 flex items-center justify-center p-6">
-             <div className="bg-white rounded-[2rem] p-8 w-full max-w-md flex flex-col items-center gap-6 shadow-2xl animate-in zoom-in-95 duration-500 max-h-[90vh] overflow-y-auto no-scrollbar">
+        <div className="absolute inset-0 z-50 bg-[#CFF3E2]/90 flex items-center justify-center p-4 sm:p-6">
+             <div className="bg-white rounded-[2rem] p-6 sm:p-8 w-full max-w-md flex flex-col items-center gap-6 shadow-2xl animate-in zoom-in-95 duration-500 max-h-[90vh] overflow-y-auto no-scrollbar">
                 
                 {newlyUnlocked.length > 0 ? (
                     <div className="w-full flex flex-col items-center gap-4">
@@ -614,8 +606,8 @@ export const Game: React.FC = () => {
       )}
 
       {shouldShowReview && currentReviewEvent && (
-        <div className="absolute inset-0 z-[70] bg-white/95 flex items-center justify-center p-6">
-          <div className="w-full max-w-lg bg-white border-[6px] border-[#FFE9A8] rounded-[2.5rem] p-6 shadow-2xl flex flex-col gap-4 text-center">
+        <div className="absolute inset-0 z-[70] bg-white/95 flex items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-lg bg-white border-[6px] border-[#FFE9A8] rounded-[2.5rem] p-5 sm:p-6 shadow-2xl flex flex-col gap-4 text-center">
             <p className="text-xs uppercase tracking-[0.45em] text-gray-400">Word Review</p>
             <p className="text-sm text-gray-500">Step {currentReviewIndex + 1} of {reviewQueue.length}</p>
             {currentReviewEvent.image && (

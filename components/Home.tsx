@@ -57,6 +57,9 @@ export const Home: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [cameraSupported, setCameraSupported] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState<number>(
+    typeof window !== 'undefined' ? window.innerWidth : 1024
+  );
 
   // Load initial state
   useEffect(() => {
@@ -107,6 +110,12 @@ export const Home: React.FC = () => {
         /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
       setIsMobileDevice(mobileRegex.test(navigator.userAgent));
     }
+
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -300,11 +309,21 @@ export const Home: React.FC = () => {
   const avatarUrl = previewUrl || profilePictureUrl;
   const showCameraButton = cameraSupported && !isMobileDevice;
   const showUploadButton = isMobileDevice || !cameraSupported;
+  const orbitScale = viewportWidth < 480 ? 0.55 : viewportWidth < 768 ? 0.72 : viewportWidth < 1024 ? 0.9 : 1;
+  const scaledOrbits = useMemo(
+    () =>
+      ORBIT_CONFIGS.map((config) => ({
+        ...config,
+        radius: Math.round(config.radius * orbitScale),
+        size: Math.max(48, Math.round(config.size * orbitScale + 8)),
+      })),
+    [orbitScale]
+  );
 
   return (
-    <div className="relative min-h-screen bg-[#CDEBFF] flex flex-col items-center justify-center p-6 text-center gap-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
-      <div className="absolute inset-0 z-0">
-        {ORBIT_CONFIGS.map((config, index) => {
+    <div className="relative min-h-screen bg-[#CDEBFF] flex flex-col items-center justify-center px-4 sm:px-6 pt-8 pb-16 text-center gap-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
+      <div className="absolute inset-0 z-0 flex items-center justify-center">
+        {scaledOrbits.map((config, index) => {
           const squish = floatingSquishmallows[index];
           if (!squish) return null;
           return (
@@ -323,6 +342,7 @@ export const Home: React.FC = () => {
                   animationDelay: config.delay,
                   transformOrigin: '50% 50%',
                   animationPlayState: pausedOrbitIds[squish.id] ? 'paused' : 'running',
+                  transform: 'translate3d(0, 0, 0)',
                 }}
               >
                 <div
@@ -355,7 +375,7 @@ export const Home: React.FC = () => {
         })}
       </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center gap-8 w-full">
+      <div className="relative z-10 flex flex-col items-center justify-center gap-8 w-full max-w-5xl mx-auto">
         <div className="relative flex flex-col items-center gap-5 animate-in slide-in-from-top duration-700">
           <div className="relative z-10 flex flex-col items-center gap-3">
             {isHoliday && (
@@ -376,13 +396,15 @@ export const Home: React.FC = () => {
                 </h1>
               </div>
             </div>
-            <p className="max-w-xs px-6 font-body text-sm text-[#6B4F3F]/80 md:text-base">{HERO_TAGLINE}</p>
+            <p className="max-w-xl px-6 font-body text-sm text-[#6B4F3F]/80 md:text-base leading-relaxed">
+              {HERO_TAGLINE}
+            </p>
           </div>
         </div>
 
-        <div className="w-full max-w-sm bg-white/80 backdrop-blur-sm rounded-3xl p-6 shadow-lg border-4 border-white animate-in zoom-in duration-500 animate-float" style={{ animationDelay: '1s' }}>
-        <div className="flex flex-col items-center gap-3 mb-4">
-          <div className="flex flex-col items-center gap-3">
+        <div className="w-full max-w-lg bg-white/80 backdrop-blur-sm rounded-3xl p-6 sm:p-8 shadow-lg border-4 border-white animate-in zoom-in duration-500 animate-float" style={{ animationDelay: '1s' }}>
+        <div className="flex flex-col items-center gap-4 mb-4">
+          <div className="flex flex-col items-center gap-4 w-full">
             <div className="relative">
               <div className="w-24 h-24 md:w-28 md:h-28 rounded-full border-4 border-white bg-white/80 shadow-2xl overflow-hidden flex items-center justify-center">
                 {avatarUrl ? (
@@ -560,7 +582,9 @@ export const Home: React.FC = () => {
           </div>
         </div>
 
-        <footer className="fixed bottom-4 text-[#6B4F3F] opacity-50 text-sm font-bold">Safe & Cozy Play • No Ads</footer>
+        <footer className="fixed bottom-3 left-1/2 -translate-x-1/2 text-[#6B4F3F] opacity-60 text-xs sm:text-sm font-bold px-4 py-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md border border-white">
+          Safe & Cozy Play • No Ads
+        </footer>
       </div>
     </div>
   );
