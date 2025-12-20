@@ -46,17 +46,21 @@ export const ParadeBook: React.FC = () => {
     return [...unlocked, ...locked];
   }, [collection, unlockedIds]);
 
-  const getRarityIcon = (type: string) => {
-    switch (type) {
-      case 'ultra-rare':
-        return <Sparkles size={16} fill="#DCCBFF" className="text-purple-500" />;
-      case 'rare':
-        return <Star size={16} fill="#FFE9A8" className="text-orange-400" />;
-      case 'classic':
-      default:
-        return <Heart size={16} fill="#FFD6E8" className="text-pink-400" />;
-    }
-  };
+  const recipientOptions = useMemo(
+    () =>
+      players
+        .filter((player) => player.name !== playerName)
+        .map((player) => ({
+          name: player.name,
+          alreadyHasSquish: selectedSquish ? player.unlockedIds?.includes(selectedSquish.id) : false,
+        })),
+    [players, playerName, selectedSquish]
+  );
+
+  const eligibleRecipients = useMemo(
+    () => recipientOptions.filter((option) => !option.alreadyHasSquish),
+    [recipientOptions]
+  );
 
   const getRarityLabel = (type: string) => {
      switch (type) {
@@ -64,6 +68,40 @@ export const ParadeBook: React.FC = () => {
       case 'rare': return 'Rare';
       default: return 'Classic';
      }
+  };
+
+  const getRarityStarCount = (type: string) => {
+    switch (type) {
+      case 'ultra-rare':
+        return 3;
+      case 'rare':
+        return 2;
+      default:
+        return 1;
+    }
+  };
+
+  const getRarityStyles = (type: string) => {
+    switch (type) {
+      case 'ultra-rare':
+        return {
+          bg: 'bg-[#F3E8FF]',
+          text: 'text-[#5B21B6]',
+          border: 'border-[#DCCBFF]',
+        };
+      case 'rare':
+        return {
+          bg: 'bg-[#FFF4E5]',
+          text: 'text-[#B45309]',
+          border: 'border-[#FCD34D]',
+        };
+      default:
+        return {
+          bg: 'bg-[#FFE4ED]',
+          text: 'text-[#BE185D]',
+          border: 'border-[#FFB6C9]',
+        };
+    }
   };
 
   const closeDetailsModal = useCallback(() => {
@@ -90,13 +128,15 @@ export const ParadeBook: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const candidates = players.filter((player) => player.name !== playerName).map((player) => player.name);
-    if (!candidates.length) {
+    if (!recipientOptions.length || !eligibleRecipients.length) {
       setSelectedRecipient('');
       return;
     }
-    setSelectedRecipient((prev) => (candidates.includes(prev) ? prev : candidates[0]));
-  }, [players, playerName]);
+    setSelectedRecipient((prev) => {
+      if (eligibleRecipients.some((option) => option.name === prev)) return prev;
+      return eligibleRecipients[0]?.name ?? '';
+    });
+  }, [recipientOptions, eligibleRecipients]);
 
   useEffect(() => {
     if (!incomingGift?.squishId) return;
@@ -160,19 +200,47 @@ export const ParadeBook: React.FC = () => {
                               <>
                                   <img src={squish.image} alt={squish.name} className="w-full h-full object-cover" />
                                   <div className="absolute bottom-0 w-full bg-white/90 p-2 text-center backdrop-blur-sm">
-                                      <p className="font-heading font-bold text-sm truncate text-[#6B4F3F]">{squish.name}</p>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="font-heading font-bold text-sm truncate text-[#6B4F3F]">{squish.name}</p>
+                                        <span
+                                          className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[0.65rem] font-heading font-bold uppercase tracking-wide ${getRarityStyles(squish.type).bg} ${getRarityStyles(squish.type).text} ${getRarityStyles(squish.type).border}`}
+                                        >
+                                          {getRarityLabel(squish.type)}
+                                        </span>
+                                      </div>
                                   </div>
                               </>
-                          ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                                  <Lock size={48} className="mb-2 opacity-50" />
+                            ) : (
+                              <div className="relative w-full h-full overflow-hidden bg-[#E6E6E6]">
+                                <img
+                                  src={squish.image}
+                                  alt={squish.name}
+                                  className="absolute inset-0 h-full w-full object-cover opacity-25"
+                                  aria-hidden
+                                />
+                                <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px]" />
+                                <div className="relative flex h-full w-full flex-col items-center justify-center text-gray-600 gap-2 px-2 text-center">
+                                  <Lock size={48} className="opacity-70" />
                                   <p className="font-body font-bold text-sm">Locked</p>
+                                  <div className="flex items-center justify-center gap-1 text-amber-500">
+                                    {Array.from({ length: getRarityStarCount(squish.type) }).map((_, index) => (
+                                      <Star key={`${squish.id}-locked-star-${index}`} size={14} fill="#F59E0B" stroke="#F59E0B" />
+                                    ))}
+                                  </div>
+                                  <p className="text-[0.7rem] font-heading font-bold uppercase tracking-wide text-[#6B4F3F]">
+                                    {getRarityLabel(squish.type)}
+                                  </p>
+                                </div>
                               </div>
                           )}
                           
                           {isUnlocked && (
-                              <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-md p-1.5 rounded-full shadow-sm border border-white/50" title={getRarityLabel(squish.type)}>
-                                  {getRarityIcon(squish.type)}
+                              <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full shadow-sm border border-white/50" title={getRarityLabel(squish.type)}>
+                                  <div className="flex items-center gap-0.5 text-amber-500">
+                                    {Array.from({ length: getRarityStarCount(squish.type) }).map((_, index) => (
+                                      <Star key={`${squish.id}-star-${index}`} size={12} fill="#FBBF24" stroke="#FBBF24" />
+                                    ))}
+                                  </div>
                               </div>
                           )}
                       </div>
@@ -199,11 +267,18 @@ export const ParadeBook: React.FC = () => {
             <div className="text-center flex flex-col gap-2">
               <div>
                 <h3 className="font-heading text-4xl text-[#6B4F3F] leading-tight">{selectedSquish.name}</h3>
-                {selectedSquish.species && (
-                  <span className="bg-[#FFE9A8] text-[#8A6D1F] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-block mt-1">
-                    {selectedSquish.species}
+                <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+                  {selectedSquish.species && (
+                    <span className="bg-[#FFE9A8] text-[#8A6D1F] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-block">
+                      {selectedSquish.species}
+                    </span>
+                  )}
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[0.65rem] font-heading font-bold uppercase tracking-wide ${getRarityStyles(selectedSquish.type).bg} ${getRarityStyles(selectedSquish.type).text} ${getRarityStyles(selectedSquish.type).border}`}
+                  >
+                    {getRarityLabel(selectedSquish.type)}
                   </span>
-                )}
+                </div>
                 <p className="text-sm text-gray-500 mt-1">{getAgeText(selectedSquish)}</p>
               </div>
 
@@ -235,17 +310,22 @@ export const ParadeBook: React.FC = () => {
                 <select
                   value={selectedRecipient}
                   onChange={(event) => setSelectedRecipient(event.target.value)}
-                  disabled={!players.length}
+                  disabled={!recipientOptions.length || !eligibleRecipients.length}
                   className="border border-[#DCCBFF] rounded-2xl px-4 py-3 font-heading text-sm text-[#6B4F3F] focus:outline-none focus:border-[#6B4F3F]"
                 >
-                  <option value="">{players.length ? 'Choose a friend' : 'No other players yet'}</option>
-                  {players
-                    .filter((player) => player.name !== playerName)
-                    .map((player) => (
-                      <option key={player.name} value={player.name}>
-                        {player.name}
-                      </option>
-                    ))}
+                  <option value="">
+                    {!recipientOptions.length
+                      ? 'No other players yet'
+                      : !eligibleRecipients.length
+                        ? 'Everyone already has this Squishmallow'
+                        : 'Choose a friend'}
+                  </option>
+                  {recipientOptions.map((option) => (
+                    <option key={option.name} value={option.name} disabled={option.alreadyHasSquish}>
+                      {option.name}
+                      {option.alreadyHasSquish ? ' - Already has this Squish' : ''}
+                    </option>
+                  ))}
                 </select>
 
                 <textarea
@@ -285,7 +365,7 @@ export const ParadeBook: React.FC = () => {
                     setGiftFeedback('Gift sent! ✨');
                     setGiftNote('');
                   }}
-                  disabled={!connected || !players.length}
+                  disabled={!connected || !recipientOptions.length || !eligibleRecipients.length}
                 >
                   {connected ? 'Send gift' : 'Waiting for connection'}
                 </Button>
