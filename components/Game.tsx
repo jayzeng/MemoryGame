@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CardItem, GameState, Squishmallow } from '../types';
 import { MOCK_SQUISHMALLOWS, WORLDS } from '../constants';
@@ -135,21 +135,53 @@ const buildLearningEvent = (
   };
 };
 
+const FAST_MISMATCH_THRESHOLD_MS = 900;
+const FAST_RATIO_THRESHOLD = 0.85;
+const PENALTY_WINDOW_SIZE = 8;
+const MIN_ATTEMPTS_FOR_PENALTY = 5;
+const MIN_MISMATCHES_FOR_PENALTY = 5;
+const PENALTY_MESSAGE =
+  'Whoops! The parade was moving too fast—we are reshuffling so everybody keeps learning and having fun.';
+
+const getMismatchTolerance = (cardCount: number) => {
+  if (cardCount <= 16) return 0.78;
+  if (cardCount <= 28) return 0.82;
+  return 0.9;
+};
+
+const getProgressiveTolerance = (cardCount: number, matchedCount: number) => {
+  const base = getMismatchTolerance(cardCount);
+  if (cardCount === 0) return base;
+  const totalPairs = cardCount / 2;
+  const matchedPairs = matchedCount / 2;
+  const progressRatio = Math.min(1, matchedPairs / totalPairs);
+  const extraTolerance = progressRatio * 0.22; // loosen penalty as progress increases
+  return Math.min(0.98, base + extraTolerance);
+};
+
 export const Game: React.FC = () => {
   const { worldId } = useParams<{ worldId: string }>();
   const navigate = useNavigate();
   const { isHoliday } = useHoliday();
+  const attemptStartRef = useRef<number | null>(null);
+  const lastAttemptDurationRef = useRef(0);
+  const recentAttemptsRef = useRef<{ duration: number; isMatch: boolean }[]>([]);
+  const penaltyActiveRef = useRef(false);
+  const reshuffleEffectTimerRef = useRef<number | null>(null);
   const [cards, setCards] = useState<CardItem[]>([]);
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [flippedIds, setFlippedIds] = useState<string[]>([]);
   const [matchedIds, setMatchedIds] = useState<string[]>([]);
   const [moves, setMoves] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [penaltyActive, setPenaltyActive] = useState(false);
+  const [reshuffleEffect, setReshuffleEffect] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<Squishmallow[]>([]);
   const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
   const [reviewQueue, setReviewQueue] = useState<LearningEvent[]>([]);
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+  const [isReviewSpeechPlaying, setIsReviewSpeechPlaying] = useState(false);
   const shouldShowReview =
     gameState === GameState.COMPLETED &&
     reviewQueue.length > 0 &&
@@ -160,13 +192,11 @@ export const Game: React.FC = () => {
     setSelectedSquish(null);
   }, []);
 
-  // Initialize Game
   useEffect(() => {
-    initializeGame();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worldId]);
+    penaltyActiveRef.current = penaltyActive;
+  }, [penaltyActive]);
 
-  const initializeGame = () => {
+  const initializeGame = useCallback(() => {
     // Determine grid size based on world
     const worldIndex = WORLDS.findIndex(w => w.id === worldId) || 0;
     
@@ -202,9 +232,78 @@ export const Game: React.FC = () => {
     setSelectedSquish(null);
     setReviewQueue([]);
     setCurrentReviewIndex(0);
-  };
+    recentAttemptsRef.current = [];
+    lastAttemptDurationRef.current = 0;
+    attemptStartRef.current = null;
+    setPenaltyActive(false);
+  }, [worldId]);
+
+  // Initialize Game
+  useEffect(() => {
+    initializeGame();
+  }, [initializeGame]);
+
+  const triggerFastFlipPenalty = useCallback(() => {
+    if (penaltyActiveRef.current) return;
+    soundManager.speak('Whoops! Take a breath and try the parade again at a slower pace.');
+    setPenaltyActive(true);
+  }, []);
+
+  const acknowledgePenalty = useCallback(() => {
+    setPenaltyActive(false);
+    setReshuffleEffect(true);
+    if (reshuffleEffectTimerRef.current) {
+      clearTimeout(reshuffleEffectTimerRef.current);
+    }
+    reshuffleEffectTimerRef.current = window.setTimeout(() => {
+      setReshuffleEffect(false);
+    }, 750);
+    initializeGame();
+  }, [initializeGame]);
+
+  const recordAttemptResult = useCallback((isMatch: boolean) => {
+    const duration = lastAttemptDurationRef.current;
+    const entry = {
+      duration: duration > 0 ? duration : 0,
+      isMatch,
+    };
+    const updated = [...recentAttemptsRef.current, entry];
+    if (updated.length > PENALTY_WINDOW_SIZE) {
+      updated.shift();
+    }
+    recentAttemptsRef.current = updated;
+    lastAttemptDurationRef.current = 0;
+    attemptStartRef.current = null;
+  }, []);
+
+  const shouldTriggerPenalty = useCallback(() => {
+    const history = recentAttemptsRef.current;
+    if (history.length < MIN_ATTEMPTS_FOR_PENALTY) return false;
+    const timedAttempts = history.filter(entry => entry.duration > 0);
+    if (timedAttempts.length === 0) return false;
+    const fastAttempts = timedAttempts.filter(entry => entry.duration <= FAST_MISMATCH_THRESHOLD_MS).length;
+    const fastRatio = fastAttempts / timedAttempts.length;
+    if (fastRatio < FAST_RATIO_THRESHOLD) return false;
+    const mismatchCount = history.filter(entry => !entry.isMatch).length;
+    if (mismatchCount < MIN_MISMATCHES_FOR_PENALTY) return false;
+    const mismatchRatio = mismatchCount / history.length;
+    const tolerance = getProgressiveTolerance(cards.length, matchedIds.length);
+    if (mismatchRatio >= tolerance) {
+      triggerFastFlipPenalty();
+      return true;
+    }
+    return false;
+  }, [cards.length, matchedIds.length, triggerFastFlipPenalty]);
 
   const getSquishmallow = (charId: string) => MOCK_SQUISHMALLOWS.find(s => s.id === charId)!;
+
+  useEffect(() => {
+    return () => {
+      if (reshuffleEffectTimerRef.current) {
+        clearTimeout(reshuffleEffectTimerRef.current);
+      }
+    };
+  }, []);
 
   // Check for matches
   useEffect(() => {
@@ -244,6 +343,7 @@ export const Game: React.FC = () => {
 
           setMatchedIds(prev => [...prev, id1, id2]);
           setCards(prev => prev.map(c => (c.id === id1 || c.id === id2) ? { ...c, isMatched: true } : c));
+          recordAttemptResult(true);
           setFlippedIds([]);
         } else {
           // No match, flip back after delay
@@ -252,11 +352,13 @@ export const Game: React.FC = () => {
             setCards(prev => prev.map(c => (c.id === id1 || c.id === id2) ? { ...c, isFlipped: false } : c));
             setFlippedIds([]);
           }, 1000);
+          recordAttemptResult(false);
+          shouldTriggerPenalty();
           return () => clearTimeout(timer);
         }
       }
     }
-  }, [flippedIds, cards]);
+  }, [flippedIds, cards, triggerFastFlipPenalty]);
 
   // Check for Win
   useEffect(() => {
@@ -286,10 +388,34 @@ export const Game: React.FC = () => {
     soundManager.speak(textToSpeak);
   }, [selectedSquish]);
 
+  const speakReviewSentence = useCallback(() => {
+    if (!currentReviewEvent) return;
+    setIsReviewSpeechPlaying(true);
+    soundManager.stopSpeaking();
+    soundManager.speak(currentReviewEvent.sentence, {
+      onEnd: () => {
+        setIsReviewSpeechPlaying(false);
+      },
+    });
+  }, [currentReviewEvent]);
+
+  const handleNextReview = useCallback(() => {
+    soundManager.stopSpeaking();
+    setIsReviewSpeechPlaying(false);
+    setCurrentReviewIndex(prev => prev + 1);
+  }, []);
+
   useEffect(() => {
-    if (!shouldShowReview || !currentReviewEvent) return;
-    soundManager.speak(currentReviewEvent.sentence);
-  }, [shouldShowReview, currentReviewEvent]);
+    if (!shouldShowReview || !currentReviewEvent) {
+      setIsReviewSpeechPlaying(false);
+      return;
+    }
+    speakReviewSentence();
+    return () => {
+      soundManager.stopSpeaking();
+      setIsReviewSpeechPlaying(false);
+    };
+  }, [shouldShowReview, currentReviewEvent, speakReviewSentence]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -308,7 +434,13 @@ export const Game: React.FC = () => {
   }, [selectedSquish, isPaused, closeSelectedSquish]);
 
   const handleCardClick = (id: string) => {
-    if (flippedIds.length >= 2 || isPaused || gameState !== GameState.PLAYING) return;
+    if (flippedIds.length >= 2 || isPaused || gameState !== GameState.PLAYING || penaltyActive) return;
+    const now = Date.now();
+    if (flippedIds.length === 0) {
+      attemptStartRef.current = now;
+    } else if (flippedIds.length === 1) {
+      lastAttemptDurationRef.current = now - (attemptStartRef.current ?? now);
+    }
     
     soundManager.playFlip();
     
@@ -338,6 +470,10 @@ export const Game: React.FC = () => {
 
   if (!worldId) return null;
 
+  const boardGridClass = `grid ${getGridClass()} gap-3 w-full mx-auto pb-4 transition-all duration-300 ${
+    reshuffleEffect ? 'animate-pulse shadow-[0_0_45px_rgba(255,229,168,0.65)]' : ''
+  }`;
+
   return (
     <div className="min-h-screen bg-[#CDEBFF] flex flex-col relative overflow-hidden">
       {showConfetti && (
@@ -364,7 +500,7 @@ export const Game: React.FC = () => {
 
       {/* Game Board */}
       <main className="flex-1 p-4 flex items-center justify-center overflow-y-auto">
-         <div className={`grid ${getGridClass()} gap-3 w-full mx-auto pb-4 transition-all duration-300`}>
+         <div className={boardGridClass}>
             {cards.map(card => (
                 <Card 
                   key={card.id} 
@@ -392,6 +528,23 @@ export const Game: React.FC = () => {
                     Quit to Home
                 </Button>
             </div>
+        </div>
+      )}
+
+      {penaltyActive && (
+        <div className="absolute inset-0 z-[65] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 pointer-events-auto">
+          <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl text-center animate-in zoom-in-95">
+            <div className="flex items-center justify-center gap-2 text-[#6B4F3F]">
+              <Info size={24} />
+              <p className="font-heading text-xl">Slow down, parade leader!</p>
+            </div>
+            <p className="font-body text-sm text-gray-500">{PENALTY_MESSAGE}</p>
+            <p className="text-xs uppercase tracking-[0.4em] text-gray-400">Tap continue when you are ready</p>
+            <Button variant="primary" fullWidth onClick={acknowledgePenalty}>
+              Continue
+            </Button>
+            <p className="text-xs text-gray-400">We’ll reshuffle and restart once you let us know you’re ready.</p>
+          </div>
         </div>
       )}
 
@@ -490,7 +643,7 @@ export const Game: React.FC = () => {
             <div className="flex items-center justify-center gap-3">
               <Button
                 variant="icon"
-                onClick={() => soundManager.speak(currentReviewEvent.sentence)}
+                onClick={speakReviewSentence}
                 aria-label={`Hear sentence for ${currentReviewEvent.word}`}
               >
                 <Volume2 size={20} />
@@ -500,7 +653,8 @@ export const Game: React.FC = () => {
             <Button
               variant="primary"
               fullWidth
-              onClick={() => setCurrentReviewIndex(prev => prev + 1)}
+              onClick={handleNextReview}
+              aria-busy={isReviewSpeechPlaying}
             >
               {currentReviewIndex === reviewQueue.length - 1 ? 'Finish Review' : 'Next Word'}
             </Button>

@@ -1,3 +1,7 @@
+type SpeakOptions = {
+  onEnd?: () => void;
+};
+
 class SoundManager {
   private audioContext: AudioContext | null = null;
   private isMuted: boolean = false;
@@ -22,7 +26,7 @@ class SoundManager {
     }
   }
 
-  public speak(text: string) {
+  public speak(text: string, options?: SpeakOptions) {
     if (this.isMuted || !this.synth) return;
 
     // Cancel any currently speaking utterance to avoid queue buildup
@@ -37,6 +41,12 @@ class SoundManager {
     const voices = this.synth.getVoices();
     const friendlyVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Samantha'));
     if (friendlyVoice) utterance.voice = friendlyVoice;
+
+    if (options?.onEnd) {
+      utterance.addEventListener('end', () => {
+        options.onEnd?.();
+      });
+    }
 
     this.synth.speak(utterance);
   }

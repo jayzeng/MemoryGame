@@ -46,16 +46,24 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
     prevFlipped.current = item.isFlipped;
   }, [isHoliday, item.isFlipped]);
 
+  const hatStyleIndex = useMemo(() => {
+    let hash = 0;
+    for (const char of squishmallow.id) {
+      hash = (hash * 31 + char.charCodeAt(0)) % 5;
+    }
+    return hash;
+  }, [squishmallow.id]);
+
   return (
-    <div 
+    <div
       className={`relative cursor-pointer perspective-1000 group w-full aspect-square ${item.isMatched ? 'animate-match-bounce' : ''}`}
       onClick={handleClick}
     >
-      <div 
+      <div
         className={`w-full h-full transform-style-3d flip-transition ${item.isFlipped || item.isMatched ? 'rotate-y-180' : ''}`}
       >
         {/* Front of Card (Face Down) */}
-        <div 
+        <div
           className="absolute w-full h-full backface-hidden rounded-3xl bg-white border-4 border-[#CDEBFF] shadow-[0_6px_20px_rgba(0,0,0,0.1)] flex items-center justify-center overflow-hidden"
         >
           <div className="w-2/3 h-2/3 bg-[#CDEBFF] rounded-full opacity-50 flex items-center justify-center">
@@ -64,31 +72,41 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
         </div>
 
         {/* Back of Card (Face Up / Character) */}
-        <div 
+        <div
           className={`absolute w-full h-full backface-hidden rotate-y-180 rounded-3xl bg-white border-4 ${item.isMatched ? 'border-[#CFF3E2] shadow-[0_0_24px_rgba(207,243,226,0.6)]' : 'border-[#FFD6E8]'} shadow-md overflow-hidden flex flex-col`}
         >
           {/* Image Container */}
-          <div className="flex-1 w-full relative overflow-hidden p-2">
-            <img 
+          <div className="flex-1 w-full relative overflow-visible p-2">
+            <img
               src={imgSrc}
               alt={squishmallow.name}
               className="w-full h-full object-contain"
               onError={handleImageError}
               referrerPolicy="no-referrer"
             />
+            {isHoliday && (
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+                <div className={`holiday-hat holiday-hat-style-${hatStyleIndex}`} aria-hidden="true">
+                  <span className="holiday-hat-band" />
+                  <span className="holiday-hat-accent" />
+                  <span className="holiday-hat-leaf" />
+                  <span className="holiday-hat-star" />
+                </div>
+              </div>
+            )}
           </div>
-          
+
           {/* Name Label (Sight Reading) */}
           <div className={`h-8 w-full ${item.isMatched ? 'bg-[#CFF3E2]' : 'bg-[#FFF0F5]'} flex items-center justify-center border-t-2 border-white/50 transition-colors duration-300`}>
-             <span className="font-heading font-bold text-[#6B4F3F] text-sm sm:text-base tracking-widest uppercase">
-                {squishmallow.name}
-             </span>
+            <span className="font-heading font-bold text-[#6B4F3F] text-sm sm:text-base tracking-widest uppercase">
+              {squishmallow.name}
+            </span>
           </div>
 
           {item.isMatched && (
-             <div className="absolute inset-0 bg-[#CFF3E2] bg-opacity-20 flex items-center justify-center animate-pulse pointer-events-none">
-                <span className="text-4xl">✨</span>
-             </div>
+            <div className="absolute inset-0 bg-[#CFF3E2] bg-opacity-20 flex items-center justify-center animate-pulse pointer-events-none">
+              <span className="text-4xl">✨</span>
+            </div>
           )}
         </div>
       </div>
