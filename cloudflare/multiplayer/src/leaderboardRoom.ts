@@ -360,6 +360,19 @@ export class LeaderboardRoom {
     });
   }
 
+  private handleNamesRequest(request: Request) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: PROFILE_CORS_HEADERS });
+    }
+    if (request.method !== 'GET') {
+      return this.jsonResponse({ error: 'Method not allowed' }, 405);
+    }
+    const names = Array.from(this.players.values())
+      .map((player) => player.name)
+      .filter(Boolean);
+    return this.jsonResponse({ names });
+  }
+
   private async handleProfileRequest(request: Request, url: URL) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: PROFILE_CORS_HEADERS });
@@ -408,6 +421,9 @@ export class LeaderboardRoom {
       const [client, server] = pair;
       this.handleConnection(server);
       return new Response(null, { status: 101, webSocket: client });
+    }
+    if (url.pathname === '/names') {
+      return this.handleNamesRequest(request);
     }
     if (url.pathname === '/profile') {
       return this.handleProfileRequest(request, url);

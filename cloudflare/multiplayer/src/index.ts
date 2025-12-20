@@ -135,6 +135,9 @@ export default {
     if (url.pathname === PROFILE_PATH) {
       return forwardProfileRequest(request, env);
     }
+    if (url.pathname === '/names') {
+      return forwardProfileRequest(request, env);
+    }
     if (url.pathname === '/ws') {
       const room = getRoomName(request);
       const durableId = env.LEADERBOARD_DO.idFromName(room);

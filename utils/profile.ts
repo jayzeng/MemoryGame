@@ -31,6 +31,10 @@ export interface PlayerProfileResponse {
   profilePictureKey?: string | null;
 }
 
+export interface NamesResponse {
+  names: string[];
+}
+
 export interface UploadProfileResponse {
   profilePictureKey: string;
 }
@@ -45,6 +49,15 @@ export const fetchPlayerProfile = async (baseUrl: string, name: string) => {
     throw new Error(`Profile lookup failed (${response.status})`);
   }
   return (await response.json()) as PlayerProfileResponse;
+};
+
+export const fetchTakenNames = async (baseUrl: string) => {
+  const response = await fetch(`${trimTrailingSlash(baseUrl)}/names`);
+  if (!response.ok) {
+    throw new Error(`Name lookup failed (${response.status})`);
+  }
+  const payload = (await response.json()) as NamesResponse;
+  return Array.isArray(payload.names) ? payload.names : [];
 };
 
 export const uploadProfilePicture = async (baseUrl: string, name: string, file: File) => {

@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from './Button';
 import { Play, Book, Trophy, Edit2, Snowflake, Camera } from 'lucide-react';
-import { storage } from '../utils/storage';
+import { PLAYER_NAME_EVENT, storage } from '../utils/storage';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import type { Squishmallow } from '../types';
 import './Home.css';
@@ -10,9 +10,11 @@ import { useHoliday } from './HolidayContext';
 import {
   buildProfilePictureUrl,
   fetchPlayerProfile,
+  fetchTakenNames,
   getProfileApiBase,
   uploadProfilePicture,
 } from '../utils/profile';
+import { useMultiplayer } from './MultiplayerProvider';
 
 const ORBIT_CONFIGS = [
   { radius: 180, size: 80, duration: 12, delay: '0s', borderColor: 'border-[#FFD6E8]/50' },
@@ -25,6 +27,50 @@ const ORBIT_CONFIGS = [
 
 const HERO_TAGLINE =
   'Collect the fluffiest pals, match their memories, and parade them across the sweetest playground.';
+
+const FRIENDLY_SUFFIXES = [
+  'Sprout',
+  'Mochi',
+  'Spark',
+  'Bubble',
+  'Giggles',
+  'Sunny',
+  'Pebble',
+  'Waffle',
+  'Puff',
+  'Noodle',
+  'Snuggle',
+  'Berry',
+  'Doodle',
+  'Bumble',
+  'Cloud',
+  'Cocoa',
+  'Twinkle',
+  'Glimmer',
+  'Pip',
+  'Jelly',
+  'Wiggle',
+  'Hug',
+  'Mellow',
+];
+
+const normalizeName = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 32);
+
+const getNameStem = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const firstWord = (trimmed.split(/\s+/).find(Boolean) ?? trimmed).trim();
+  const lettersOnly = firstWord.replace(/[^a-zA-Z]/g, '');
+  if (lettersOnly) return lettersOnly;
+  const alphanumeric = firstWord.replace(/[^a-zA-Z0-9]/g, '');
+  return alphanumeric || trimmed.replace(/\s+/g, '');
+};
 
 const getRandomSquishmallows = (count: number): Squishmallow[] => {
   const pool = [...MOCK_SQUISHMALLOWS];
@@ -39,6 +85,7 @@ const getRandomSquishmallows = (count: number): Squishmallow[] => {
 
 export const Home: React.FC = () => {
   const [name, setName] = useState('');
+  const [savedName, setSavedName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [collectedCount, setCollectedCount] = useState(0);
   const [floatingSquishmallows] = useState<Squishmallow[]>(() => getRandomSquishmallows(ORBIT_CONFIGS.length));
@@ -60,16 +107,125 @@ export const Home: React.FC = () => {
   const [viewportWidth, setViewportWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : 1024
   );
+  const [nameFeedback, setNameFeedback] = useState<string | null>(null);
+  const [suggestedName, setSuggestedName] = useState<string | null>(null);
+  const [remoteNames, setRemoteNames] = useState<Set<string>>(() => new Set());
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const { players } = useMultiplayer();
+
+  const loadRemoteNames = useCallback(async () => {
+    if (!profileApiBase) return new Set<string>();
+    try {
+      const names = await fetchTakenNames(profileApiBase);
+      const normalized = names
+        .map((value) => normalizeName(value))
+        .filter(Boolean) as string[];
+      const next = new Set<string>(normalized);
+      setRemoteNames(next);
+      return next;
+    } catch (error) {
+      console.warn('Unable to load names from the backend', error);
+      return new Set<string>();
+    }
+  }, [profileApiBase]);
+
+  useEffect(() => {
+    loadRemoteNames();
+  }, [loadRemoteNames]);
+
+  const buildTakenNames = useCallback(
+    (external?: Set<string>) => {
+      const names = new Set<string>();
+      (external ?? remoteNames).forEach((value) => {
+        const normalizedEntry = normalizeName(value);
+        if (normalizedEntry) {
+          names.add(normalizedEntry);
+        }
+      });
+      storage.getLeaderboard().forEach((entry) => {
+        const normalizedEntry = normalizeName(entry.name);
+        if (normalizedEntry) {
+          names.add(normalizedEntry);
+        }
+      });
+      players.forEach((player) => {
+        const normalizedEntry = normalizeName(player.name);
+        if (normalizedEntry) {
+          names.add(normalizedEntry);
+        }
+      });
+
+      const normalizedSaved = normalizeName(savedName);
+      if (normalizedSaved) {
+        names.delete(normalizedSaved);
+      }
+
+      return names;
+    },
+    [players, remoteNames, savedName]
+  );
+
+  const isNameTaken = useCallback(
+    (candidate: string, takenSet?: Set<string>) => {
+      const normalized = normalizeName(candidate);
+      const stemNormalized = normalizeName(getNameStem(candidate));
+      if (!normalized && !stemNormalized) return false;
+      const set = takenSet ?? buildTakenNames();
+      if (normalized && set.has(normalized)) return true;
+      if (stemNormalized && set.has(stemNormalized)) return true;
+      return false;
+    },
+    [buildTakenNames]
+  );
+
+  const suggestName = useCallback(
+    (candidate: string, takenSet?: Set<string>) => {
+      const set = takenSet ?? buildTakenNames();
+      const stem = getNameStem(candidate) || 'Parade';
+      const shuffled = [...FRIENDLY_SUFFIXES];
+      const maxLength = 12;
+
+      for (let i = shuffled.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      for (const suffix of shuffled) {
+        const maxBaseLength = Math.max(3, maxLength - suffix.length - 1);
+        if (maxBaseLength <= 0) continue;
+        const clipped = stem.slice(0, maxBaseLength);
+        const suggestion = `${clipped} ${suffix}`.slice(0, maxLength);
+        if (!isNameTaken(suggestion, set)) {
+          return suggestion;
+        }
+      }
+      return null;
+    },
+    [buildTakenNames, isNameTaken]
+  );
 
   // Load initial state
   useEffect(() => {
     const storedName = storage.getPlayerName();
     if (storedName) {
       setName(storedName);
+      setSavedName(storedName);
     } else {
       setIsEditing(true);
     }
     refreshCount();
+  }, []);
+
+  useEffect(() => {
+    const handleNameChange = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (typeof detail === 'string') {
+        setSavedName(detail);
+        setName(detail);
+      }
+    };
+    window.addEventListener(PLAYER_NAME_EVENT, handleNameChange as EventListener);
+    return () => window.removeEventListener(PLAYER_NAME_EVENT, handleNameChange as EventListener);
   }, []);
 
   useEffect(() => {
@@ -164,11 +320,37 @@ export const Home: React.FC = () => {
     setCollectedCount(storage.getUnlockedIds().length);
   };
 
-  const handleSaveName = (event?: React.FormEvent) => {
+  const handleSaveName = async (event?: React.FormEvent) => {
     event?.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
+
+    let takenNames = buildTakenNames();
+    if (profileApiBase && remoteNames.size === 0) {
+      setIsCheckingName(true);
+      try {
+        const remoteSet = await loadRemoteNames();
+        takenNames = buildTakenNames(remoteSet);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }
+
+    if (isNameTaken(trimmed, takenNames)) {
+      const alternative = suggestName(trimmed, takenNames);
+      setSuggestedName(alternative);
+      setNameFeedback(
+        alternative
+          ? `${trimmed} is already taken, what about ${alternative}?`
+          : `${trimmed} is already taken, please try another name.`
+      );
+      return;
+    }
+
+    setNameFeedback(null);
+    setSuggestedName(null);
     storage.setPlayerName(trimmed);
+    setSavedName(trimmed);
     setIsEditing(false);
 
     storage.updateLeaderboard();
@@ -423,24 +605,47 @@ export const Home: React.FC = () => {
               </div>
             </div>
             {isEditing ? (
-              <form className="flex gap-2 w-full" onSubmit={handleSaveName}>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter your name"
-                  className="flex-1 bg-white border-2 border-[#DCCBFF] rounded-xl px-4 py-2 font-heading text-[#6B4F3F] text-lg focus:outline-none focus:border-[#6B4F3F]"
-                  maxLength={12}
-                />
-                <Button
-                  variant="secondary"
-                  type="submit"
-                  className="rounded-xl px-4 py-2 font-heading uppercase tracking-wide text-xs"
-                  disabled={!name.trim()}
-                >
-                  Save
-                </Button>
-              </form>
+              <div className="flex flex-col gap-2 w-full">
+                <form className="flex gap-2 w-full" onSubmit={handleSaveName}>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setNameFeedback(null);
+                      setSuggestedName(null);
+                    }}
+                    placeholder="Enter your name"
+                    className="flex-1 bg-white border-2 border-[#DCCBFF] rounded-xl px-4 py-2 font-heading text-[#6B4F3F] text-lg focus:outline-none focus:border-[#6B4F3F]"
+                    maxLength={12}
+                  />
+                  <Button
+                    variant="secondary"
+                    type="submit"
+                    className="rounded-xl px-4 py-2 font-heading uppercase tracking-wide text-xs"
+                    disabled={!name.trim() || isCheckingName}
+                  >
+                    {isCheckingName ? 'Checking...' : 'Save'}
+                  </Button>
+                </form>
+                {nameFeedback && (
+                  <div className="w-full rounded-xl border border-[#F2B8B5] bg-[#FFF1F0] px-4 py-3 text-left text-sm text-[#B33A3A]">
+                    <p className="font-heading mb-1">{nameFeedback}</p>
+                    {suggestedName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setName(suggestedName);
+                          setNameFeedback(null);
+                        }}
+                        className="rounded-full bg-white px-3 py-1 text-[0.75rem] font-heading font-bold uppercase tracking-wide text-[#B33A3A] shadow-sm border border-[#F2B8B5] hover:bg-[#FFECEC]"
+                      >
+                        Use {suggestedName}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
               <div
                 className="flex items-center gap-2 group cursor-pointer"
