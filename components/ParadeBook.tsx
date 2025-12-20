@@ -46,6 +46,16 @@ export const ParadeBook: React.FC = () => {
     return [...unlocked, ...locked];
   }, [collection, unlockedIds]);
 
+  const leaderboardStats = useMemo(() => {
+    const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+    const rankIndex = playerName ? sorted.findIndex((player) => player.name === playerName) : -1;
+    const playerRank = rankIndex >= 0 ? rankIndex + 1 : null;
+    const othersDiscovered = sorted
+      .filter((player) => player.name !== playerName)
+      .reduce((total, player) => total + (Number.isFinite(player.score) ? player.score : 0), 0);
+    return { playerRank, othersDiscovered };
+  }, [players, playerName]);
+
   const recipientOptions = useMemo(
     () =>
       players
@@ -164,22 +174,51 @@ export const ParadeBook: React.FC = () => {
             <div className="w-12" /> {/* Spacer for balance */}
         </header>
 
-        <section className="bg-white/80 rounded-3xl shadow p-4 mb-6 border border-white/60">
-          <div className="flex flex-wrap justify-between gap-3 text-sm font-semibold text-[#6B4F3F]">
-            <span>Unlocked {unlockedCount}</span>
-            <span>Locked {lockedCount}</span>
-            <span>Total {totalCount}</span>
-          </div>
-          <div className="mt-3 h-3 bg-[#E6E6E6] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
-              style={{ width: `${totalCount ? (unlockedCount / totalCount) * 100 : 0}%` }}
-            />
-          </div>
-        </section>
+        <div className="mb-6 grid gap-4 md:grid-cols-10">
+          <section className="bg-white/90 rounded-2xl shadow-sm p-4 border border-white/70 md:col-span-7">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-heading uppercase tracking-wide text-[#6B4F3F]/70">
+              <span className="flex items-center gap-2 text-[#6B4F3F] font-bold text-sm">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">Unlocked</span>
+                {unlockedCount}
+              </span>
+              <span className="flex items-center gap-2 text-[#6B4F3F] font-bold text-sm">
+                <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">Locked</span>
+                {lockedCount}
+              </span>
+              <span className="flex items-center gap-2 text-[#6B4F3F] font-bold text-sm">
+                <span className="rounded-full bg-gray-50 px-3 py-1 text-gray-600">Total</span>
+                {totalCount}
+              </span>
+            </div>
+            <div className="mt-3 h-2 bg-[#E6E6E6] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
+                style={{ width: `${totalCount ? (unlockedCount / totalCount) * 100 : 0}%` }}
+              />
+            </div>
+          </section>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {sortedCollection.map((squish) => {
+          <section className="bg-white/90 rounded-2xl shadow-sm p-4 border border-white/70 flex items-center justify-between gap-3 md:col-span-3">
+            <div className="flex flex-col gap-1">
+              <p className="text-[0.65rem] uppercase tracking-wide text-[#6B4F3F]/70 font-heading">Your rank</p>
+              <p className="font-heading text-xl text-[#6B4F3F]">
+                {leaderboardStats.playerRank ? `#${leaderboardStats.playerRank}` : '—'}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1 text-right">
+              <p className="text-[0.65rem] uppercase tracking-wide text-[#6B4F3F]/70 font-heading">Others found</p>
+              <p className="font-heading text-xl text-[#6B4F3F]">
+                {leaderboardStats.othersDiscovered}
+              </p>
+            </div>
+            <span className={`text-[0.65rem] rounded-full px-2.5 py-1 font-heading font-bold uppercase tracking-wide ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {connected ? 'Live' : 'Offline'}
+            </span>
+          </section>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {sortedCollection.map((squish) => {
                 const isUnlocked = unlockedIds.includes(squish.id);
                 return (
                   <div key={squish.id} className="flex flex-col items-center gap-2 group">
