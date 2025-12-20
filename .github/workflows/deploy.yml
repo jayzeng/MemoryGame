@@ -10,7 +10,6 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  secrets: read
 
 concurrency:
   group: "pages"
@@ -18,6 +17,8 @@ concurrency:
 
 jobs:
   build:
+    env:
+      ENV_FILE: ${{ secrets.ENV_FILE }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,9 +30,9 @@ jobs:
           node-version: '20'
 
       - name: Write dotenv
-        if: ${{ secrets.ENV_FILE != '' }}
+        if: ${{ env.ENV_FILE != '' }}
         run: |
-          printf '%s\n' "${{ secrets.ENV_FILE }}" > .env.local
+          printf '%s\n' "$ENV_FILE" > .env.local
 
       - name: Cache npm
         uses: actions/cache@v4
