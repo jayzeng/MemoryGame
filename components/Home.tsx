@@ -104,6 +104,7 @@ export const Home: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [cameraSupported, setCameraSupported] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [isIosDevice, setIsIosDevice] = useState(false);
   const [viewportWidth, setViewportWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : 1024
   );
@@ -264,7 +265,11 @@ export const Home: React.FC = () => {
     if (typeof navigator !== 'undefined') {
       const mobileRegex =
         /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
-      setIsMobileDevice(mobileRegex.test(navigator.userAgent));
+      const userAgent = navigator.userAgent;
+      const isAppleMobile = /iPad|iPhone|iPod/i.test(userAgent);
+      const isIpadOs = /Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1;
+      setIsMobileDevice(mobileRegex.test(userAgent) || isIpadOs);
+      setIsIosDevice(isAppleMobile || isIpadOs);
     }
 
     const handleResize = () => {
@@ -413,7 +418,12 @@ export const Home: React.FC = () => {
 
   const openPhotoPicker = () => {
     if (!ensurePhotoPrerequisites()) return;
-    fileInputRef.current?.click();
+    try {
+      fileInputRef.current?.click();
+    } catch (error) {
+      console.error('Unable to open photo picker', error);
+      setPhotoFeedback('This device blocked the photo picker. Please try camera mode instead.');
+    }
   };
 
   const closeCamera = () => {
@@ -491,6 +501,7 @@ export const Home: React.FC = () => {
   const avatarUrl = previewUrl || profilePictureUrl;
   const showCameraButton = cameraSupported && !isMobileDevice;
   const showUploadButton = isMobileDevice || !cameraSupported;
+  const captureAttr = isIosDevice ? undefined : 'environment';
   const orbitScale = viewportWidth < 480 ? 0.55 : viewportWidth < 768 ? 0.72 : viewportWidth < 1024 ? 0.9 : 1;
   const scaledOrbits = useMemo(
     () =>
@@ -699,7 +710,7 @@ export const Home: React.FC = () => {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
+                capture={captureAttr}
                 className="hidden"
                 onChange={handlePhotoSelection}
               />
