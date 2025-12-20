@@ -153,8 +153,11 @@ export const ParadeBook: React.FC = () => {
 
   const closeDetailsModal = useCallback(() => {
     soundManager.stopSpeaking();
+    if (selectedSquish) {
+      setNewGiftedIds((prev) => prev.filter((id) => id !== selectedSquish.id));
+    }
     setSelectedSquish(null);
-  }, []);
+  }, [selectedSquish]);
 
   const handleSelectSquish = useCallback((squish: Squishmallow) => {
     setSelectedSquish(squish);
@@ -195,6 +198,11 @@ export const ParadeBook: React.FC = () => {
     const received = MOCK_SQUISHMALLOWS.find((squish) => squish.id === incomingGift.squishId);
     if (received) {
       setSelectedSquish(received);
+    }
+    if (incomingGift?.squishId) {
+      setNewGiftedIds((prev) =>
+        prev.includes(incomingGift.squishId) ? prev : [...prev, incomingGift.squishId]
+      );
     }
   }, [incomingGift]);
 
@@ -321,17 +329,18 @@ export const ParadeBook: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {visibleCollection.map((squish) => {
                 const isUnlocked = unlockedIds.includes(squish.id);
+                const isNewGift = newGiftedIds.includes(squish.id);
                 return (
                   <div key={squish.id} className="flex flex-col items-center gap-2 group">
                       <div
                           role={isUnlocked ? 'button' : undefined}
                           tabIndex={isUnlocked ? 0 : undefined}
-                          onClick={() => isUnlocked && setSelectedSquish(squish)}
+                          onClick={() => isUnlocked && handleSelectSquish(squish)}
                           onKeyDown={(event) => {
                               if (!isUnlocked) return;
                               if (event.key === 'Enter' || event.key === ' ') {
                                   event.preventDefault();
-                                  setSelectedSquish(squish);
+                                  handleSelectSquish(squish);
                               }
                           }}
                           className={`relative w-full aspect-[3/4] rounded-3xl overflow-hidden shadow-lg border-4 transition-transform duration-300 group-hover:scale-[1.03] ${isUnlocked ? 'border-white bg-white cursor-pointer' : 'border-[#E6E6E6] bg-[#E6E6E6]'}`}
@@ -390,6 +399,12 @@ export const ParadeBook: React.FC = () => {
                                     ))}
                                   </div>
                               </div>
+                          )}
+                          {isUnlocked && isNewGift && (
+                            <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[0.7rem] font-heading font-bold uppercase tracking-wide px-2 py-1 rounded-full shadow-md flex items-center gap-1">
+                              <Sparkles size={12} />
+                              New
+                            </div>
                           )}
                       </div>
                   </div>
