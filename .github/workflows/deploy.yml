@@ -28,7 +28,7 @@ jobs:
           node-version: '20'
 
       - name: Write dotenv
-        if: secrets.ENV_FILE != ''
+        if: ${{ secrets.ENV_FILE != '' }}
         run: |
           printf '%s\n' "${{ secrets.ENV_FILE }}" > .env.local
 
