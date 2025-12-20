@@ -118,9 +118,7 @@ const buildLearningEvent = (
 
   const sentence =
     type === 'match'
-      ? squishmallow.bio
-        ? `"${squishmallow.bio}"`
-        : `You just found ${squishmallow.name}!`
+      ? squishmallow.bio || squishmallow.description || `You just found ${squishmallow.name}!`
       : related
       ? `${related.name} was the other card; notice how ${squishmallow.name} sounds different.`
       : squishmallow.description || `Spell ${squishmallow.name} slowly to remember it.`;
@@ -647,6 +645,7 @@ export const Game: React.FC = () => {
               fullWidth
               onClick={handleNextReview}
               aria-busy={isReviewSpeechPlaying}
+              disabled={isReviewSpeechPlaying}
             >
               {currentReviewIndex === reviewQueue.length - 1 ? 'Finish Review' : 'Next Word'}
             </Button>

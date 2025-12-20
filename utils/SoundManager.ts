@@ -27,14 +27,23 @@ class SoundManager {
   }
 
   public speak(text: string, options?: SpeakOptions) {
-    if (this.isMuted || !this.synth) return;
+    if (this.isMuted || !this.synth) {
+      options?.onEnd?.();
+      return;
+    }
+
+    const message = text?.trim();
+    if (!message) {
+      options?.onEnd?.();
+      return;
+    }
 
     // Cancel any currently speaking utterance to avoid queue buildup
     this.synth.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9; // Slightly slower for kids
-    utterance.pitch = 1.1; // Slightly higher/friendlier
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.rate = 0.8; // Slightly slower for kids
+    utterance.pitch = 1.2; // Slightly higher/friendlier
     utterance.volume = 0.8;
     
     // Try to find a friendly English voice
