@@ -23,6 +23,7 @@ export const ParadeBook: React.FC = () => {
   const [giftNote, setGiftNote] = useState('');
   const [giftFeedback, setGiftFeedback] = useState<string | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState('');
+  const [recipientQuery, setRecipientQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(
     Math.min(INITIAL_RENDER_COUNT, MOCK_SQUISHMALLOWS.length)
   );
@@ -47,6 +48,11 @@ export const ParadeBook: React.FC = () => {
     const textToSpeak = selectedSquish.bio || selectedSquish.description || selectedSquish.name;
     soundManager.speak(textToSpeak);
   }, [selectedSquish]);
+
+  useEffect(() => {
+    if (!selectedSquish) return;
+    setRecipientQuery('');
+  }, [selectedSquish?.id]);
 
   const collection = MOCK_SQUISHMALLOWS;
   const totalCount = collection.length;
@@ -107,6 +113,17 @@ export const ParadeBook: React.FC = () => {
   const eligibleRecipients = useMemo(
     () => recipientOptions.filter((option) => !option.alreadyHasSquish),
     [recipientOptions]
+  );
+
+  const filteredRecipientOptions = useMemo(() => {
+    const query = recipientQuery.trim().toLowerCase();
+    if (!query) return recipientOptions;
+    return recipientOptions.filter((option) => option.name.toLowerCase().includes(query));
+  }, [recipientOptions, recipientQuery]);
+
+  const filteredEligibleRecipients = useMemo(
+    () => filteredRecipientOptions.filter((option) => !option.alreadyHasSquish),
+    [filteredRecipientOptions]
   );
 
   const getRarityLabel = (type: string) => {
@@ -183,15 +200,15 @@ export const ParadeBook: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!recipientOptions.length || !eligibleRecipients.length) {
+    if (!filteredRecipientOptions.length || !filteredEligibleRecipients.length) {
       setSelectedRecipient('');
       return;
     }
     setSelectedRecipient((prev) => {
-      if (eligibleRecipients.some((option) => option.name === prev)) return prev;
-      return eligibleRecipients[0]?.name ?? '';
+      if (filteredEligibleRecipients.some((option) => option.name === prev)) return prev;
+      return filteredEligibleRecipients[0]?.name ?? '';
     });
-  }, [recipientOptions, eligibleRecipients]);
+  }, [filteredEligibleRecipients, filteredRecipientOptions.length]);
 
   useEffect(() => {
     if (!incomingGift?.squishId) return;
@@ -470,20 +487,30 @@ export const ParadeBook: React.FC = () => {
                   Choose another collector and send a little kindness. Kind note is optional.
                 </p>
 
+                <input
+                  value={recipientQuery}
+                  onChange={(event) => setRecipientQuery(event.target.value)}
+                  placeholder="Search recipients..."
+                  disabled={!recipientOptions.length}
+                  className="border border-[#DCCBFF] rounded-2xl px-4 py-3 font-body text-sm text-[#6B4F3F] focus:outline-none focus:border-[#6B4F3F] disabled:opacity-60"
+                />
+
                 <select
                   value={selectedRecipient}
                   onChange={(event) => setSelectedRecipient(event.target.value)}
-                  disabled={!recipientOptions.length || !eligibleRecipients.length}
+                  disabled={!filteredRecipientOptions.length || !filteredEligibleRecipients.length}
                   className="border border-[#DCCBFF] rounded-2xl px-4 py-3 font-heading text-sm text-[#6B4F3F] focus:outline-none focus:border-[#6B4F3F]"
                 >
                   <option value="">
                     {!recipientOptions.length
                       ? 'No other players yet'
-                      : !eligibleRecipients.length
+                      : recipientQuery.trim() && !filteredRecipientOptions.length
+                        ? 'No matches'
+                        : !filteredEligibleRecipients.length
                         ? 'Everyone already has this Squishmallow'
                         : 'Choose a friend'}
                   </option>
-                  {recipientOptions.map((option) => (
+                  {filteredRecipientOptions.map((option) => (
                     <option key={option.name} value={option.name} disabled={option.alreadyHasSquish}>
                       {option.name}
                       {option.alreadyHasSquish ? ' - Already has this Squish' : ''}
@@ -528,7 +555,7 @@ export const ParadeBook: React.FC = () => {
                     setGiftFeedback('Gift sent! ✨');
                     setGiftNote('');
                   }}
-                  disabled={!connected || !recipientOptions.length || !eligibleRecipients.length}
+                  disabled={!connected || !filteredRecipientOptions.length || !filteredEligibleRecipients.length}
                 >
                   {connected ? 'Send gift' : 'Waiting for connection'}
                 </Button>

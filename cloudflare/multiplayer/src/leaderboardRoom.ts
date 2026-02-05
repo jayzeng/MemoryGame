@@ -7,7 +7,6 @@ const PROFILE_CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
 };
 
-const MAX_LEADERBOARD_SIZE = 20;
 const GIFT_HISTORY_LIMIT = 24;
 
 interface PlayerState {
@@ -18,8 +17,11 @@ interface PlayerState {
   giftsReceived: number;
   lastUpdated: string;
   unlockedIds: string[];
+  hasPlayed: boolean;
   profilePictureKey?: string;
 }
+
+type StoredPlayerState = Omit<PlayerState, 'hasPlayed'> & { hasPlayed?: boolean };
 
 interface GiftRecord {
   id: string;
@@ -76,19 +78,6 @@ const normalizeUnlocked = (input?: unknown): string[] => {
   }, []);
 };
 
-const sanitizeName = (value: string) => {
-  const trimmed = (value ?? '').trim().slice(0, 32);
-  const display = trimmed || 'Guest';
-  const slug = display
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return {
-    id: slug || `guest_${crypto.randomUUID().slice(0, 6)}`,
-    display,
-  };
-};
-
 export class LeaderboardRoom {
   private players = new Map<string, PlayerState>();
   private gifts: GiftRecord[] = [];
@@ -102,12 +91,24 @@ export class LeaderboardRoom {
   }
 
   private async bootstrap() {
-    const stored = await this.state.storage.get<{
-      players?: Record<string, PlayerState>;
-      gifts?: GiftRecord[];
-    }>(['players', 'gifts']);
-    this.players = new Map(Object.entries(stored.players ?? {}));
-    this.gifts = stored.gifts ?? [];
+    const stored = await this.state.storage.get(['players', 'gifts']);
+    const storedPlayers = stored.get('players') as Record<string, StoredPlayerState> | undefined;
+    const storedGifts = stored.get('gifts') as GiftRecord[] | undefined;
+    let shouldPersist = false;
+    const players: Array<[string, PlayerState]> = Object.entries(storedPlayers ?? {}).map(
+      ([id, player]) => {
+        const hasPlayed = typeof player.hasPlayed === 'boolean' ? player.hasPlayed : true;
+        if (typeof player.hasPlayed !== 'boolean') {
+          shouldPersist = true;
+        }
+        return [id, { ...player, hasPlayed } as PlayerState];
+      }
+    );
+    this.players = new Map(players);
+    this.gifts = storedGifts ?? [];
+    if (shouldPersist) {
+      await this.persistState();
+    }
   }
 
   private async persistState() {
@@ -118,12 +119,12 @@ export class LeaderboardRoom {
   }
 
   private getLeaderboardSnapshot() {
-    const snapshot = Array.from(this.players.values());
+    const snapshot = Array.from(this.players.values()).filter((player) => player.hasPlayed);
     snapshot.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return Date.parse(b.lastUpdated) - Date.parse(a.lastUpdated);
     });
-    return snapshot.slice(0, MAX_LEADERBOARD_SIZE);
+    return snapshot;
   }
 
   private broadcast(payload: ServerMessage) {
@@ -160,6 +161,7 @@ export class LeaderboardRoom {
       giftsReceived: 0,
       lastUpdated: new Date().toISOString(),
       unlockedIds: [],
+      hasPlayed: false,
     };
     this.players.set(playerId, entry);
     return entry;
@@ -168,6 +170,7 @@ export class LeaderboardRoom {
   private updatePlayerScore(playerId: string, name: string, score: number) {
     const normalized = Math.max(0, Math.floor(score ?? 0));
     const entry = this.ensurePlayer(playerId, name);
+    entry.hasPlayed = true;
     entry.score = Math.max(entry.score, normalized);
     entry.lastUpdated = new Date().toISOString();
     this.players.set(playerId, entry);

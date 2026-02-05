@@ -100,6 +100,7 @@ export const Home: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoFeedback, setPhotoFeedback] = useState<string | null>(null);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -367,30 +368,24 @@ export const Home: React.FC = () => {
   };
 
   const ensurePhotoPrerequisites = () => {
-    if (!name.trim()) {
-      setPhotoFeedback('Save your name before capturing a photo.');
+    if (!savedName.trim()) {
+      setPhotoFeedback('Add your name first so we can save your photo.');
       return false;
     }
     if (!profileApiBase) {
-      setPhotoFeedback('Enable the multiplayer backend before uploading photos.');
+      setPhotoFeedback('Turn on multiplayer to save your photo.');
       return false;
     }
     return true;
   };
 
-  const handlePhotoFile = async (file: File) => {
+  const uploadPendingPhotoFile = async (file: File) => {
     if (!profileApiBase) return;
-    let preview: string | null = null;
-    setPhotoFeedback(null);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-    preview = URL.createObjectURL(file);
-    setPreviewUrl(preview);
+    if (!savedName.trim()) return;
     setIsUploadingPhoto(true);
     let success = false;
     try {
-      const result = await uploadProfilePicture(profileApiBase, name.trim(), file);
+      const result = await uploadProfilePicture(profileApiBase, savedName.trim(), file);
       if (result.profilePictureKey) {
         setProfilePictureKey(result.profilePictureKey);
         setPhotoFeedback('Profile photo saved!');
@@ -401,28 +396,51 @@ export const Home: React.FC = () => {
       setPhotoFeedback('Unable to save the photo—please try again.');
     } finally {
       setIsUploadingPhoto(false);
-      if (preview) {
-        URL.revokeObjectURL(preview);
-      }
       if (!success) {
+        // Keep the preview visible so it feels like the photo "stuck" even if saving failed.
+      } else {
+        setPendingPhotoFile(null);
         setPreviewUrl(null);
       }
     }
   };
 
+  const handlePhotoFile = async (file: File) => {
+    setPhotoFeedback(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(URL.createObjectURL(file));
+    setPendingPhotoFile(file);
+
+    if (!ensurePhotoPrerequisites()) {
+      return;
+    }
+
+    await uploadPendingPhotoFile(file);
+  };
+
+  useEffect(() => {
+    if (!pendingPhotoFile) return;
+    if (!profileApiBase) return;
+    if (!savedName.trim()) return;
+    if (isUploadingPhoto) return;
+    uploadPendingPhotoFile(pendingPhotoFile);
+  }, [isUploadingPhoto, pendingPhotoFile, profileApiBase, savedName]);
+
   const handlePhotoSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (!ensurePhotoPrerequisites()) {
-      return;
-    }
     await handlePhotoFile(file);
   };
 
   const openPhotoPicker = () => {
-    if (!ensurePhotoPrerequisites()) return;
     try {
+      if (fileInputRef.current && typeof (fileInputRef.current as any).showPicker === 'function') {
+        (fileInputRef.current as any).showPicker();
+        return;
+      }
       fileInputRef.current?.click();
     } catch (error) {
       console.error('Unable to open photo picker', error);
@@ -439,9 +457,6 @@ export const Home: React.FC = () => {
   };
 
   const openCamera = async () => {
-    if (!ensurePhotoPrerequisites()) {
-      return;
-    }
     if (!cameraSupported) {
       setPhotoFeedback('Camera capture is not supported in this browser.');
       return;
@@ -656,7 +671,7 @@ export const Home: React.FC = () => {
                   {showUploadButton && (
                     <button 
                       onClick={openPhotoPicker} 
-                      disabled={isUploadingPhoto || !name.trim() || !profileApiBase}
+                      disabled={isUploadingPhoto}
                       className="p-3 bg-white rounded-full text-[#6B4F3F] hover:scale-110 transition-transform shadow-lg disabled:opacity-50"
                     >
                       <Camera size={20} />
@@ -680,11 +695,16 @@ export const Home: React.FC = () => {
                 )}
               </div>
               
-              <div className="absolute bottom-3 left-0 right-0 px-3">
-                {isEditing ? (
-                  <div className="flex flex-col gap-1">
-                    <form onSubmit={handleSaveName} className="flex gap-2">
-                      <input
+	              <div className="absolute bottom-3 left-0 right-0 px-3">
+	                {photoFeedback && (
+	                  <p className="mb-1 text-[0.55rem] text-[#6B4F3F]/70 font-heading text-center">
+	                    {photoFeedback}
+	                  </p>
+	                )}
+	                {isEditing ? (
+	                  <div className="flex flex-col gap-1">
+	                    <form onSubmit={handleSaveName} className="flex gap-2">
+	                      <input
                         type="text"
                         value={name}
                         onChange={(e) => {
@@ -768,7 +788,7 @@ export const Home: React.FC = () => {
                   className="h-12 text-sm bg-[#CFF3E2] border-[#a5e0c5] hover:bg-[#bbf0da] shadow-md"
                 >
                   <Trophy className="mr-2" size={16} />
-                  Tops
+                  Leaderboard
                 </Button>
               </Link>
             </div>
@@ -797,7 +817,7 @@ export const Home: React.FC = () => {
       />
 
       {isCameraOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[100] flex min-h-[100dvh] items-center justify-center bg-black/70 backdrop-blur-sm p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] animate-in fade-in duration-300">
           <div className="w-full max-w-md rounded-[2.5rem] bg-white p-4 shadow-2xl space-y-4 border-8 border-[#DCCBFF] animate-in zoom-in-95 duration-300">
             <div className="relative aspect-video rounded-[1.5rem] overflow-hidden bg-black shadow-inner">
               <video
