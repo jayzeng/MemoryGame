@@ -25,6 +25,7 @@ export const Leaderboard: React.FC = () => {
   const [requestSquish, setRequestSquish] = useState<Squishmallow | null>(null);
   const [requestNote, setRequestNote] = useState('');
   const [requestFeedback, setRequestFeedback] = useState<string | null>(null);
+  const [showOnlyNeeded, setShowOnlyNeeded] = useState(false);
 
   useEffect(() => {
     storage.updateLeaderboard();
@@ -54,6 +55,54 @@ export const Leaderboard: React.FC = () => {
     return new Map(MOCK_SQUISHMALLOWS.map((squish) => [squish.id, squish]));
   }, []);
 
+  const myUnlockedIds = useMemo(() => storage.getUnlockedIds(), [playerName]);
+  const myUnlockedSet = useMemo(() => new Set(myUnlockedIds), [myUnlockedIds]);
+
+  const getRarityLabel = (type: Squishmallow['type']) => {
+    switch (type) {
+      case 'ultra-rare':
+        return 'Ultra Rare';
+      case 'rare':
+        return 'Rare';
+      default:
+        return 'Classic';
+    }
+  };
+
+  const getRarityRank = (type: Squishmallow['type']) => {
+    switch (type) {
+      case 'ultra-rare':
+        return 3;
+      case 'rare':
+        return 2;
+      default:
+        return 1;
+    }
+  };
+
+  const getRarityStyles = (type: Squishmallow['type']) => {
+    switch (type) {
+      case 'ultra-rare':
+        return {
+          bg: 'bg-[#F3E8FF]',
+          text: 'text-[#5B21B6]',
+          border: 'border-[#DCCBFF]',
+        };
+      case 'rare':
+        return {
+          bg: 'bg-[#FFF4E5]',
+          text: 'text-[#B45309]',
+          border: 'border-[#FCD34D]',
+        };
+      default:
+        return {
+          bg: 'bg-[#FFE4ED]',
+          text: 'text-[#BE185D]',
+          border: 'border-[#FFB6C9]',
+        };
+    }
+  };
+
   const selectedPlayer: LeaderboardPlayer | null = useMemo(() => {
     if (!selectedPlayerName) return null;
     return players.find((player) => player.name === selectedPlayerName) ?? null;
@@ -61,10 +110,23 @@ export const Leaderboard: React.FC = () => {
 
   const selectedPlayerSquish = useMemo(() => {
     if (!selectedPlayer?.unlockedIds?.length) return [];
-    return selectedPlayer.unlockedIds
+    const squishList = selectedPlayer.unlockedIds
       .map((id) => squishById.get(id))
       .filter(Boolean) as Squishmallow[];
-  }, [selectedPlayer?.unlockedIds, squishById, selectedPlayer?.name]);
+    squishList.sort((a, b) => {
+      const rarityDelta = getRarityRank(b.type) - getRarityRank(a.type);
+      if (rarityDelta) return rarityDelta;
+      const neededDelta = Number(!myUnlockedSet.has(b.id)) - Number(!myUnlockedSet.has(a.id));
+      if (neededDelta) return neededDelta;
+      return a.name.localeCompare(b.name);
+    });
+    return squishList;
+  }, [getRarityRank, myUnlockedSet, selectedPlayer?.unlockedIds, squishById, selectedPlayer?.name]);
+
+  const selectedPlayerSquishToShow = useMemo(() => {
+    if (!showOnlyNeeded) return selectedPlayerSquish;
+    return selectedPlayerSquish.filter((squish) => !myUnlockedSet.has(squish.id));
+  }, [myUnlockedSet, selectedPlayerSquish, showOnlyNeeded]);
 
   useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {
@@ -153,6 +215,7 @@ export const Leaderboard: React.FC = () => {
                           if (!canOpenCollection) return;
                           setSelectedPlayerName(entry.name);
                           setRequestFeedback(null);
+                          setShowOnlyNeeded(false);
                         }}
                         onKeyDown={(event) => {
                           if (!canOpenCollection) return;
@@ -160,6 +223,7 @@ export const Leaderboard: React.FC = () => {
                             event.preventDefault();
                             setSelectedPlayerName(entry.name);
                             setRequestFeedback(null);
+                            setShowOnlyNeeded(false);
                           }
                         }}
                         className={`flex items-center p-5 rounded-[1.5rem] transition-transform hover:scale-[1.02] shadow-sm ${
@@ -258,53 +322,130 @@ export const Leaderboard: React.FC = () => {
               </div>
             </div>
 
-            {!selectedPlayerSquish.length ? (
-              <div className="rounded-3xl border-2 border-gray-100 bg-gray-50 p-8 text-center">
-                <p className="font-heading text-xl text-gray-300">No collection yet.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {selectedPlayerSquish.map((squish) => (
-                  <button
-                    key={`${selectedPlayer.name}-${squish.id}`}
-                    type="button"
-                    className="group rounded-3xl border-2 border-gray-50 bg-white p-3 shadow-sm hover:shadow-md transition-shadow text-left"
-                    onClick={() => {
-                      setRequestSquish(squish);
-                      setRequestNote('');
-                      setRequestFeedback(null);
-                    }}
-                    disabled={!connected || !playerName.trim() || selectedPlayer.name === playerName}
-                    title={
-                      !playerName.trim()
-                        ? 'Add your name to ask for gifts'
-                        : selectedPlayer.name === playerName
-                          ? 'That is you'
-                          : connected
-                            ? 'Ask for a gift'
-                            : 'Connect to ask'
-                    }
-                  >
-                    <div className="aspect-square rounded-2xl bg-gradient-to-br from-[#FFF0F5] to-white p-3 flex items-center justify-center shadow-inner border border-white/60">
-                      <img
-                        src={squish.image}
-                        alt={squish.name}
-                        className="w-full h-full object-contain drop-shadow-lg"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <p className="font-heading font-bold text-[#6B4F3F] text-sm truncate">{squish.name}</p>
-                      <Gift size={16} className="text-[#FF8FAB] opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <p className="text-[0.55rem] font-bold uppercase tracking-[0.25em] text-[#6B4F3F]/50 mt-0.5">
-                      Tap to ask
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
+	            {!selectedPlayerSquish.length ? (
+	              <div className="rounded-3xl border-2 border-gray-100 bg-gray-50 p-8 text-center">
+	                <p className="font-heading text-xl text-gray-300">No collection yet.</p>
+	              </div>
+	            ) : (
+	              <>
+	                <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border-2 border-white bg-[#FFFDF3] px-4 py-3">
+	                  <div className="flex items-center gap-2">
+	                    <button
+	                      type="button"
+	                      onClick={() => setShowOnlyNeeded(false)}
+	                      className={`rounded-full border px-4 py-2 text-xs font-heading font-bold uppercase tracking-wide transition-colors ${
+	                        showOnlyNeeded
+	                          ? 'bg-white border-gray-200 text-[#6B4F3F]/70 hover:text-[#6B4F3F]'
+	                          : 'bg-[#FFD6E8] border-[#FFB3D4] text-[#6B4F3F]'
+	                      }`}
+	                    >
+	                      All
+	                    </button>
+	                    <button
+	                      type="button"
+	                      onClick={() => setShowOnlyNeeded(true)}
+	                      className={`rounded-full border px-4 py-2 text-xs font-heading font-bold uppercase tracking-wide transition-colors ${
+	                        showOnlyNeeded
+	                          ? 'bg-[#CFF3E2] border-emerald-200 text-emerald-800'
+	                          : 'bg-white border-gray-200 text-[#6B4F3F]/70 hover:text-[#6B4F3F]'
+	                      }`}
+	                      title="Only show Squishmallows you don’t have yet"
+	                    >
+	                      I need
+	                    </button>
+	                  </div>
+	                  <div className="flex items-center gap-3 text-[0.65rem] font-bold uppercase tracking-widest text-[#6B4F3F]/60">
+	                    <span className="rounded-full bg-white px-3 py-1 border border-gray-100">
+	                      You have {myUnlockedIds.length}
+	                    </span>
+	                    <span className="rounded-full bg-white px-3 py-1 border border-gray-100">
+	                      You need {selectedPlayerSquish.filter((squish) => !myUnlockedSet.has(squish.id)).length}
+	                    </span>
+	                  </div>
+	                </div>
+
+	                {!selectedPlayerSquishToShow.length ? (
+	                  <div className="rounded-3xl border-2 border-gray-100 bg-gray-50 p-8 text-center">
+	                    <p className="font-heading text-xl text-gray-300">Nothing new to find here.</p>
+	                    <p className="mt-2 text-xs text-[#6B4F3F]/60">Try another collector.</p>
+	                  </div>
+	                ) : (
+	                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+	                    {selectedPlayerSquishToShow.map((squish) => {
+	                      const iNeedIt = !myUnlockedSet.has(squish.id);
+	                      const canAsk =
+	                        connected && Boolean(playerName.trim()) && selectedPlayer.name !== playerName && iNeedIt;
+	                      return (
+	                        <button
+	                          key={`${selectedPlayer.name}-${squish.id}`}
+	                          type="button"
+	                          className={`group rounded-3xl border-2 p-3 shadow-sm transition-shadow text-left ${
+	                            iNeedIt
+	                              ? 'border-emerald-200 bg-emerald-50/60 hover:shadow-md'
+	                              : 'border-gray-50 bg-white hover:shadow-md opacity-70'
+	                          }`}
+	                          onClick={() => {
+	                            if (!canAsk) return;
+	                            setRequestSquish(squish);
+	                            setRequestNote('');
+	                            setRequestFeedback(null);
+	                          }}
+	                          disabled={!canAsk}
+	                          title={
+	                            !playerName.trim()
+	                              ? 'Add your name to ask for gifts'
+	                              : selectedPlayer.name === playerName
+	                                ? 'That is you'
+	                                : !iNeedIt
+	                                  ? 'You already have this one'
+	                                  : connected
+	                                    ? 'Ask for a gift'
+	                                    : 'Connect to ask'
+	                          }
+	                        >
+	                          <div className="aspect-square rounded-2xl bg-gradient-to-br from-[#FFF0F5] to-white p-3 flex items-center justify-center shadow-inner border border-white/60">
+	                            <img
+	                              src={squish.image}
+	                              alt={squish.name}
+	                              className="w-full h-full object-contain drop-shadow-lg"
+	                              loading="lazy"
+	                              decoding="async"
+	                            />
+	                          </div>
+	                          <div className="mt-2 flex items-start justify-between gap-2">
+	                            <p className="font-heading font-bold text-[#6B4F3F] text-sm leading-tight truncate">{squish.name}</p>
+	                            <Gift
+	                              size={16}
+	                              className={`text-[#FF8FAB] transition-opacity flex-shrink-0 ${
+	                                canAsk ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'
+	                              }`}
+	                            />
+	                          </div>
+	                          <div className="mt-1 flex items-center justify-between gap-2">
+	                            <span
+	                              className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[0.6rem] font-heading font-bold uppercase tracking-wide ${getRarityStyles(squish.type).bg} ${getRarityStyles(squish.type).text} ${getRarityStyles(squish.type).border}`}
+	                              title={getRarityLabel(squish.type)}
+	                            >
+	                              {getRarityLabel(squish.type)}
+	                            </span>
+	                            <div className="flex items-center gap-0.5 text-amber-500" aria-label={`${getRarityRank(squish.type)} star rarity`}>
+	                              {Array.from({ length: getRarityRank(squish.type) }).map((_, index) => (
+	                                <Star key={`${squish.id}-rarity-${index}`} size={12} fill="#FBBF24" stroke="#FBBF24" />
+	                              ))}
+	                            </div>
+	                          </div>
+	                          {!iNeedIt && (
+	                            <p className="mt-1 text-[0.55rem] font-bold uppercase tracking-[0.25em] text-[#6B4F3F]/50">
+	                              You have it
+	                            </p>
+	                          )}
+	                        </button>
+	                      );
+	                    })}
+	                  </div>
+	                )}
+	              </>
+	            )}
           </div>
         </div>
       )}
@@ -335,6 +476,23 @@ export const Leaderboard: React.FC = () => {
                 </p>
               </div>
             </div>
+            <div className="flex items-center justify-between gap-2 rounded-2xl border border-[#FFE9A8] bg-[#FFFDF3] px-4 py-3">
+              <span className="text-[0.65rem] uppercase tracking-[0.35em] text-[#6B4F3F]/50 font-bold">
+                Rarity
+              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[0.65rem] font-heading font-bold uppercase tracking-wide ${getRarityStyles(requestSquish.type).bg} ${getRarityStyles(requestSquish.type).text} ${getRarityStyles(requestSquish.type).border}`}
+                >
+                  {getRarityLabel(requestSquish.type)}
+                </span>
+                <div className="flex items-center gap-0.5 text-amber-500" aria-label={`${getRarityRank(requestSquish.type)} star rarity`}>
+                  {Array.from({ length: getRarityRank(requestSquish.type) }).map((_, index) => (
+                    <Star key={`request-${requestSquish.id}-${index}`} size={14} fill="#FBBF24" stroke="#FBBF24" />
+                  ))}
+                </div>
+              </div>
+            </div>
 
             <textarea
               value={requestNote}
@@ -352,6 +510,10 @@ export const Leaderboard: React.FC = () => {
                   setRequestFeedback('Add your name first.');
                   return;
                 }
+                if (myUnlockedSet.has(requestSquish.id)) {
+                  setRequestFeedback('You already have this one.');
+                  return;
+                }
                 if (!connected) {
                   setRequestFeedback('Still connecting—please wait a moment.');
                   return;
@@ -367,7 +529,7 @@ export const Leaderboard: React.FC = () => {
                 }
                 setRequestFeedback('Request sent! ✨');
               }}
-              disabled={!connected || !playerName.trim() || selectedPlayer.name === playerName}
+              disabled={!connected || !playerName.trim() || selectedPlayer.name === playerName || myUnlockedSet.has(requestSquish.id)}
             >
               Send request
             </Button>
