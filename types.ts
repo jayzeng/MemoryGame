@@ -68,3 +68,16 @@ export interface GiftRecord {
   squishName?: string;
   squishImage?: string;
 }
+
+export interface GiftRequest {
+  id: string;
+  from: string;
+  fromId: string;
+  to: string;
+  toId: string;
+  message: string;
+  createdAt: string;
+  squishId: string;
+  squishName?: string;
+  squishImage?: string;
+}

@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { storage, SCORE_UPDATE_EVENT } from './storage';
-import type { GiftRecord, LeaderboardPlayer } from '../types';
+import type { GiftRecord, GiftRequest, LeaderboardPlayer } from '../types';
 
 type ServerMessage =
   | { type: 'leaderboard_snapshot'; players: LeaderboardPlayer[]; gifts: GiftRecord[] }
   | { type: 'leaderboard_update'; players: LeaderboardPlayer[] }
   | { type: 'gift_event'; gift: GiftRecord }
   | { type: 'connected'; player: LeaderboardPlayer }
+  | { type: 'gift_request_snapshot'; requests: GiftRequest[] }
+  | { type: 'gift_request'; request: GiftRequest }
+  | { type: 'gift_request_ack'; request: GiftRequest }
+  | { type: 'gift_request_resolved'; requestId: string; accept: boolean }
   | { type: 'error'; message: string };
 
 const parseServerMessage = (data: MessageEvent['data']): ServerMessage | null => {
@@ -40,6 +44,9 @@ const buildWebSocketUrl = () => {
 export const useMultiplayerLeaderboard = (playerName: string) => {
   const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
   const [gifts, setGifts] = useState<GiftRecord[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<GiftRequest[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<GiftRequest[]>([]);
+  const [incomingRequestToast, setIncomingRequestToast] = useState<GiftRequest | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [incomingGift, setIncomingGift] = useState<GiftRecord | null>(null);
@@ -50,6 +57,10 @@ export const useMultiplayerLeaderboard = (playerName: string) => {
 
   const dismissIncomingGift = useCallback(() => {
     setIncomingGift(null);
+  }, []);
+
+  const dismissIncomingRequestToast = useCallback(() => {
+    setIncomingRequestToast(null);
   }, []);
 
   const safeSend = useCallback((payload: object) => {
@@ -98,6 +109,34 @@ export const useMultiplayerLeaderboard = (playerName: string) => {
     [playerName, safeSend]
   );
 
+  const requestGift = useCallback(
+    (params: { to: string; message?: string; squish: { id: string; name?: string; image?: string } }) => {
+      if (!playerName) return false;
+      if (!params.to.trim()) return false;
+      if (!params.squish?.id?.trim()) return false;
+      return safeSend({
+        type: 'request_gift',
+        to: params.to,
+        message: params.message?.trim() ?? '',
+        squish: params.squish,
+      });
+    },
+    [playerName, safeSend]
+  );
+
+  const respondToGiftRequest = useCallback(
+    (params: { requestId: string; accept: boolean }) => {
+      if (!playerName) return false;
+      if (!params.requestId.trim()) return false;
+      return safeSend({
+        type: 'respond_gift_request',
+        requestId: params.requestId,
+        accept: params.accept,
+      });
+    },
+    [playerName, safeSend]
+  );
+
   useEffect(() => {
     if (!playerName || !url) {
       if (wsRef.current) {
@@ -105,6 +144,9 @@ export const useMultiplayerLeaderboard = (playerName: string) => {
         wsRef.current = null;
       }
       setConnected(false);
+      setIncomingRequests([]);
+      setOutgoingRequests([]);
+      setIncomingRequestToast(null);
       return;
     }
 
@@ -148,6 +190,29 @@ export const useMultiplayerLeaderboard = (playerName: string) => {
           if (payload.gift.to === playerName) {
             setIncomingGift(payload.gift);
           }
+          break;
+        case 'gift_request_snapshot':
+          setIncomingRequests(payload.requests);
+          break;
+        case 'gift_request':
+          setIncomingRequests((prev) => {
+            const filtered = prev.filter((request) => request.id !== payload.request.id);
+            return [payload.request, ...filtered].slice(0, 24);
+          });
+          setIncomingRequestToast(payload.request);
+          break;
+        case 'gift_request_ack':
+          setOutgoingRequests((prev) => {
+            const filtered = prev.filter((request) => request.id !== payload.request.id);
+            return [payload.request, ...filtered].slice(0, 24);
+          });
+          break;
+        case 'gift_request_resolved':
+          setIncomingRequests((prev) => prev.filter((request) => request.id !== payload.requestId));
+          setOutgoingRequests((prev) => prev.filter((request) => request.id !== payload.requestId));
+          setIncomingRequestToast((prev) =>
+            prev?.id === payload.requestId ? null : prev
+          );
           break;
         case 'connected':
           setPlayers((prev) => {
@@ -193,11 +258,17 @@ export const useMultiplayerLeaderboard = (playerName: string) => {
   return {
     players,
     gifts,
+    incomingRequests,
+    outgoingRequests,
+    incomingRequestToast,
     connected,
     error,
     sendScore,
     sendGift,
+    requestGift,
+    respondToGiftRequest,
     incomingGift,
     dismissIncomingGift,
+    dismissIncomingRequestToast,
   };
 };

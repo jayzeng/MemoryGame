@@ -36,6 +36,17 @@ The multiplayer features use a Cloudflare Worker + Durable Object to keep a shar
    `npx wrangler deploy --config cloudflare/multiplayer/wrangler.toml`
    (the older `publish` command has been replaced by `deploy` in Wrangler v4+).
 
+## Deploying (first time)
+1. Log in to Cloudflare (if you have not already): `npx wrangler login`
+2. Confirm which account you're deploying to: `npx wrangler whoami`
+3. Ensure the profile picture bucket exists (or create it):
+   - List buckets: `npx wrangler r2 bucket list`
+   - Create bucket: `npx wrangler r2 bucket create memorygame-profile-pics`
+4. Deploy the worker:
+   `npx wrangler deploy --config cloudflare/multiplayer/wrangler.toml`
+
+Wrangler prints the Worker URL after deploy. The WebSocket endpoint is `wss://<worker-url>/ws`, and HTTP endpoints include `/health`, `/profile`, and `/profile-picture`.
+
 ## Frontend integration
 - The React app connects via `utils/multiplayer.ts` (`useMultiplayerLeaderboard`) and reads the `VITE_MULTIPLAYER_WS_URL` environment variable. Set that value (for example, `VITE_MULTIPLAYER_WS_URL="wss://memorygame-multiplayer.<your-domain>.workers.dev/ws"`) in `.env.local` so the leaderboard UI can reach the worker.
 - The leaderboard page now shows the live player list, gift form, and gift feed via that hook. Score updates are emitted from `utils/storage.ts` through `SCORE_UPDATE_EVENT` so the WebSocket client keeps the Durable Object in sync.

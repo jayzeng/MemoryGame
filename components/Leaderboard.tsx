@@ -1,24 +1,30 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from './Button';
-import { ArrowLeft, Trophy, Star, Sparkles } from 'lucide-react';
+import { ArrowLeft, Trophy, Star, Sparkles, X, Gift } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { buildProfilePictureUrl, getProfileApiBase } from '../utils/profile';
-import { LeaderboardEntry } from '../types';
+import { LeaderboardEntry, LeaderboardPlayer, Squishmallow } from '../types';
 import { useMultiplayer } from './MultiplayerProvider';
+import { MOCK_SQUISHMALLOWS } from '../constants';
 
 type DisplayEntry = LeaderboardEntry & {
   giftsSent?: number;
   giftsReceived?: number;
   profilePictureKey?: string;
+  unlockedIds?: string[];
 };
 
 export const Leaderboard: React.FC = () => {
   const [localEntries, setLocalEntries] = useState<LeaderboardEntry[]>(storage.getLeaderboard());
   const [search, setSearch] = useState('');
   const playerName = storage.getPlayerName();
-  const { players, connected } = useMultiplayer();
+  const { players, connected, requestGift } = useMultiplayer();
   const profileApiBase = useMemo(() => getProfileApiBase(), []);
+  const [selectedPlayerName, setSelectedPlayerName] = useState<string | null>(null);
+  const [requestSquish, setRequestSquish] = useState<Squishmallow | null>(null);
+  const [requestNote, setRequestNote] = useState('');
+  const [requestFeedback, setRequestFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     storage.updateLeaderboard();
@@ -32,6 +38,7 @@ export const Leaderboard: React.FC = () => {
     giftsSent: player.giftsSent,
     giftsReceived: player.giftsReceived,
     profilePictureKey: player.profilePictureKey,
+    unlockedIds: player.unlockedIds,
   }));
 
   const entriesToShow: DisplayEntry[] = serverEntries.length ? serverEntries : localEntries;
@@ -42,6 +49,40 @@ export const Leaderboard: React.FC = () => {
   }, [entriesToShow, search]);
   const connectionLabel = connected ? 'Live' : playerName ? 'Offline' : 'Name required';
   const connectionClass = connected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500';
+
+  const squishById = useMemo(() => {
+    return new Map(MOCK_SQUISHMALLOWS.map((squish) => [squish.id, squish]));
+  }, []);
+
+  const selectedPlayer: LeaderboardPlayer | null = useMemo(() => {
+    if (!selectedPlayerName) return null;
+    return players.find((player) => player.name === selectedPlayerName) ?? null;
+  }, [players, selectedPlayerName]);
+
+  const selectedPlayerSquish = useMemo(() => {
+    if (!selectedPlayer?.unlockedIds?.length) return [];
+    return selectedPlayer.unlockedIds
+      .map((id) => squishById.get(id))
+      .filter(Boolean) as Squishmallow[];
+  }, [selectedPlayer?.unlockedIds, squishById, selectedPlayer?.name]);
+
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (requestSquish) {
+        setRequestSquish(null);
+        setRequestFeedback(null);
+        return;
+      }
+      if (selectedPlayerName) {
+        setSelectedPlayerName(null);
+        setRequestSquish(null);
+        setRequestFeedback(null);
+      }
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [requestSquish, selectedPlayerName]);
 
   return (
     <div className="min-h-screen bg-[#FFFBEB] p-6 pb-12 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
@@ -102,14 +143,30 @@ export const Leaderboard: React.FC = () => {
                       profileApiBase && entry.profilePictureKey
                         ? buildProfilePictureUrl(profileApiBase, entry.profilePictureKey)
                         : null;
+                    const canOpenCollection = connected && serverEntries.length > 0 && Boolean(entry.unlockedIds?.length);
                     return (
                       <div
                         key={`${entry.name}-${index}`}
+                        role={canOpenCollection ? 'button' : undefined}
+                        tabIndex={canOpenCollection ? 0 : undefined}
+                        onClick={() => {
+                          if (!canOpenCollection) return;
+                          setSelectedPlayerName(entry.name);
+                          setRequestFeedback(null);
+                        }}
+                        onKeyDown={(event) => {
+                          if (!canOpenCollection) return;
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedPlayerName(entry.name);
+                            setRequestFeedback(null);
+                          }
+                        }}
                         className={`flex items-center p-5 rounded-[1.5rem] transition-transform hover:scale-[1.02] shadow-sm ${
                           index === 0 ? 'bg-[#FFF9E6] border-2 border-[#FFE9A8]' : 
                           index === 1 ? 'bg-gray-50 border-2 border-gray-100' :
                           index === 2 ? 'bg-[#FDF7FF] border-2 border-[#DCCBFF]' : 'bg-white border-2 border-gray-50'
-                        }`}
+                        } ${canOpenCollection ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FFB3D4]' : ''}`}
                       >
                         <div
                           className={`w-12 h-12 rounded-full flex items-center justify-center font-heading font-bold text-2xl mr-4 shadow-inner ${
@@ -165,10 +222,159 @@ export const Leaderboard: React.FC = () => {
 
         <div className="bg-white/60 backdrop-blur-sm rounded-[2rem] border-2 border-white shadow-lg p-6 text-center">
           <p className="text-sm text-[#6B4F3F]/70 font-body leading-relaxed">
-            Add your name and photo on the home screen to join the live collector parade!
+            {connected
+              ? 'Tap a player to peek at their collection and ask for a gift.'
+              : 'Add your name and photo on the home screen to join the live collector parade!'}
           </p>
         </div>
       </div>
+
+      {selectedPlayer && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-3xl flex flex-col gap-4 shadow-2xl border-8 border-[#FFE9A8] relative max-h-[90vh] overflow-y-auto no-scrollbar">
+            <button
+              onClick={() => {
+                setSelectedPlayerName(null);
+                setRequestSquish(null);
+                setRequestFeedback(null);
+              }}
+              className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full hover:bg-gray-200 text-gray-500 transition-colors z-10"
+              aria-label="Close collection"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-heading text-3xl text-[#6B4F3F] leading-tight">{selectedPlayer.name}</h3>
+                <p className="text-xs text-[#6B4F3F]/70 font-bold uppercase tracking-widest">
+                  {selectedPlayer.unlockedIds?.length ?? 0} collected
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[0.65rem] rounded-full px-3 py-1 font-heading font-bold uppercase tracking-wide ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {connected ? 'Live' : 'Offline'}
+                </span>
+              </div>
+            </div>
+
+            {!selectedPlayerSquish.length ? (
+              <div className="rounded-3xl border-2 border-gray-100 bg-gray-50 p-8 text-center">
+                <p className="font-heading text-xl text-gray-300">No collection yet.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {selectedPlayerSquish.map((squish) => (
+                  <button
+                    key={`${selectedPlayer.name}-${squish.id}`}
+                    type="button"
+                    className="group rounded-3xl border-2 border-gray-50 bg-white p-3 shadow-sm hover:shadow-md transition-shadow text-left"
+                    onClick={() => {
+                      setRequestSquish(squish);
+                      setRequestNote('');
+                      setRequestFeedback(null);
+                    }}
+                    disabled={!connected || !playerName.trim() || selectedPlayer.name === playerName}
+                    title={
+                      !playerName.trim()
+                        ? 'Add your name to ask for gifts'
+                        : selectedPlayer.name === playerName
+                          ? 'That is you'
+                          : connected
+                            ? 'Ask for a gift'
+                            : 'Connect to ask'
+                    }
+                  >
+                    <div className="aspect-square rounded-2xl bg-gradient-to-br from-[#FFF0F5] to-white p-3 flex items-center justify-center shadow-inner border border-white/60">
+                      <img
+                        src={squish.image}
+                        alt={squish.name}
+                        className="w-full h-full object-contain drop-shadow-lg"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="font-heading font-bold text-[#6B4F3F] text-sm truncate">{squish.name}</p>
+                      <Gift size={16} className="text-[#FF8FAB] opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <p className="text-[0.55rem] font-bold uppercase tracking-[0.25em] text-[#6B4F3F]/50 mt-0.5">
+                      Tap to ask
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {selectedPlayer && requestSquish && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md flex flex-col gap-4 shadow-2xl border-8 border-[#DCCBFF] relative">
+            <button
+              onClick={() => {
+                setRequestSquish(null);
+                setRequestFeedback(null);
+              }}
+              className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full hover:bg-gray-200 text-gray-500 transition-colors z-10"
+              aria-label="Close request"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-[#FFF0F5] to-white p-3 shadow-inner border border-white/60 flex items-center justify-center">
+                <img src={requestSquish.image} alt={requestSquish.name} className="h-full w-full object-contain" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.35em] text-[#6B4F3F]/50 font-bold">Ask to gift</p>
+                <h4 className="font-heading text-2xl text-[#6B4F3F] truncate">{requestSquish.name}</h4>
+                <p className="text-xs text-[#6B4F3F]/70">
+                  Ask {selectedPlayer.name} to share this Squishmallow.
+                </p>
+              </div>
+            </div>
+
+            <textarea
+              value={requestNote}
+              onChange={(event) => setRequestNote(event.target.value)}
+              rows={3}
+              placeholder="Say something kind (optional)"
+              className="border border-[#DCCBFF] rounded-2xl px-4 py-3 font-body text-sm text-[#6B4F3F] focus:outline-none focus:border-[#6B4F3F]"
+            />
+
+            <Button
+              variant="primary"
+              className="w-full rounded-2xl"
+              onClick={() => {
+                if (!playerName.trim()) {
+                  setRequestFeedback('Add your name first.');
+                  return;
+                }
+                if (!connected) {
+                  setRequestFeedback('Still connecting—please wait a moment.');
+                  return;
+                }
+                const success = requestGift({
+                  to: selectedPlayer.name,
+                  message: requestNote.trim(),
+                  squish: { id: requestSquish.id, name: requestSquish.name, image: requestSquish.image },
+                });
+                if (!success) {
+                  setRequestFeedback('Can’t send right now—try again when the parade reconnects.');
+                  return;
+                }
+                setRequestFeedback('Request sent! ✨');
+              }}
+              disabled={!connected || !playerName.trim() || selectedPlayer.name === playerName}
+            >
+              Send request
+            </Button>
+            {requestFeedback && <p className="text-xs text-[#6B4F3F]">{requestFeedback}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

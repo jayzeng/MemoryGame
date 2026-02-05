@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import { Button } from './Button';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowUp, Lock, Star, Sparkles, Volume2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Lock, Star, Sparkles, Volume2, X, Gift } from 'lucide-react';
 import { SCORE_UPDATE_EVENT, storage } from '../utils/storage';
 import { Squishmallow } from '../types';
 import { soundManager } from '../utils/SoundManager';
@@ -24,6 +24,7 @@ export const ParadeBook: React.FC = () => {
   const [giftFeedback, setGiftFeedback] = useState<string | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState('');
   const [recipientQuery, setRecipientQuery] = useState('');
+  const [requestInFlightIds, setRequestInFlightIds] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(
     Math.min(INITIAL_RENDER_COUNT, MOCK_SQUISHMALLOWS.length)
   );
@@ -35,6 +36,10 @@ export const ParadeBook: React.FC = () => {
     connected,
     error,
     sendGift: sendGiftToPlayer,
+    incomingRequests,
+    incomingRequestToast,
+    dismissIncomingRequestToast,
+    respondToGiftRequest,
     incomingGift,
     dismissIncomingGift,
   } = useMultiplayer();
@@ -224,6 +229,11 @@ export const ParadeBook: React.FC = () => {
   }, [incomingGift]);
 
   useEffect(() => {
+    if (!requestInFlightIds.length) return;
+    setRequestInFlightIds((prev) => prev.filter((id) => incomingRequests.some((request) => request.id === id)));
+  }, [incomingRequests, requestInFlightIds.length]);
+
+  useEffect(() => {
     let ticking = false;
     const maybeLoadMore = () => {
       if (ticking) return;
@@ -342,6 +352,101 @@ export const ParadeBook: React.FC = () => {
             </span>
           </section>
         </div>
+
+        {playerName && (
+          <section className="mb-6 rounded-[2.5rem] border-4 border-white bg-white/90 p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="rounded-2xl bg-[#FFD6E8] p-2 text-[#6B4F3F] shadow-inner">
+                  <Gift size={18} />
+                </div>
+                <div>
+                  <h2 className="font-heading text-xl text-[#6B4F3F]">Gift Requests</h2>
+                  <p className="text-[0.65rem] uppercase tracking-[0.35em] text-[#6B4F3F]/50 font-bold">
+                    Incoming
+                  </p>
+                </div>
+              </div>
+              <span className={`text-[0.65rem] rounded-full px-3 py-1 font-heading font-bold uppercase tracking-wide ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                {connected ? 'Live' : 'Offline'}
+              </span>
+            </div>
+
+            {!incomingRequests.length ? (
+              <div className="mt-4 rounded-3xl border-2 border-gray-100 bg-gray-50 p-6 text-center">
+                <p className="font-heading text-lg text-gray-300">No requests yet.</p>
+                <p className="mt-1 text-xs text-[#6B4F3F]/60">Friends can ask for a Squishmallow from the leaderboard.</p>
+              </div>
+            ) : (
+              <div className="mt-4 flex flex-col gap-3">
+                {incomingRequests.map((request) => {
+                  const isBusy = requestInFlightIds.includes(request.id);
+                  const squish = MOCK_SQUISHMALLOWS.find((item) => item.id === request.squishId);
+                  return (
+                    <div
+                      key={request.id}
+                      className="rounded-3xl border-2 border-[#FFE9A8] bg-[#FFFDF3] p-4 shadow-sm"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="h-14 w-14 rounded-3xl bg-white p-2 shadow-inner border border-white/60 flex items-center justify-center overflow-hidden">
+                          {squish ? (
+                            <img src={squish.image} alt={squish.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+                          ) : (
+                            <div className="font-heading font-bold text-[#6B4F3F]/40 text-xl">?</div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[0.65rem] uppercase tracking-[0.35em] text-[#6B4F3F]/50 font-bold">
+                            From {request.from}
+                          </p>
+                          <p className="mt-1 font-heading text-lg text-[#6B4F3F] truncate">
+                            {request.squishName || squish?.name || 'A Squishmallow'}
+                          </p>
+                          <p className="mt-1 text-xs text-[#6B4F3F]/70 italic">
+                            “{request.message}”
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex gap-3">
+                        <Button
+                          variant="primary"
+                          className="flex-1 rounded-2xl"
+                          disabled={!connected || isBusy}
+                          onClick={() => {
+                            if (!connected) return;
+                            const ok = respondToGiftRequest({ requestId: request.id, accept: true });
+                            if (!ok) return;
+                            setRequestInFlightIds((prev) => (prev.includes(request.id) ? prev : [...prev, request.id]));
+                          }}
+                        >
+                          Gift it
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="flex-1 rounded-2xl"
+                          disabled={!connected || isBusy}
+                          onClick={() => {
+                            if (!connected) return;
+                            const ok = respondToGiftRequest({ requestId: request.id, accept: false });
+                            if (!ok) return;
+                            setRequestInFlightIds((prev) => (prev.includes(request.id) ? prev : [...prev, request.id]));
+                          }}
+                        >
+                          No thanks
+                        </Button>
+                      </div>
+                      {isBusy && (
+                        <p className="mt-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#6B4F3F]/50">
+                          Sending…
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {visibleCollection.map((squish) => {
@@ -607,6 +712,64 @@ export const ParadeBook: React.FC = () => {
           <div className="flex justify-end">
             <Button variant="secondary" className="text-[0.7rem]" onClick={dismissIncomingGift}>
               Thanks!
+            </Button>
+          </div>
+        </div>
+      )}
+      {incomingRequestToast && (
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 z-[55] mx-auto sm:mx-0 flex max-w-md sm:max-w-sm flex-col gap-3 rounded-3xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            {incomingRequestToast.squishImage && (
+              <img
+                src={incomingRequestToast.squishImage}
+                alt={incomingRequestToast.squishName ?? 'requested squishmallow'}
+                className="h-12 w-12 rounded-2xl object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            )}
+            <div className="min-w-0">
+              <p className="font-heading text-sm text-[#6B4F3F] font-bold truncate">
+                {incomingRequestToast.from} asked for {incomingRequestToast.squishName ?? 'a Squish'}!
+              </p>
+              <p className="text-[0.7rem] text-[#6B4F3F]/70 italic truncate">
+                “{incomingRequestToast.message}”
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              className="flex-1 text-[0.7rem] rounded-2xl"
+              disabled={!connected}
+              onClick={() => {
+                const ok = respondToGiftRequest({ requestId: incomingRequestToast.id, accept: true });
+                if (!ok) return;
+                setRequestInFlightIds((prev) => (prev.includes(incomingRequestToast.id) ? prev : [...prev, incomingRequestToast.id]));
+                dismissIncomingRequestToast();
+              }}
+            >
+              Gift it
+            </Button>
+            <Button
+              variant="secondary"
+              className="flex-1 text-[0.7rem] rounded-2xl"
+              disabled={!connected}
+              onClick={() => {
+                const ok = respondToGiftRequest({ requestId: incomingRequestToast.id, accept: false });
+                if (!ok) return;
+                setRequestInFlightIds((prev) => (prev.includes(incomingRequestToast.id) ? prev : [...prev, incomingRequestToast.id]));
+                dismissIncomingRequestToast();
+              }}
+            >
+              No thanks
+            </Button>
+            <Button
+              variant="secondary"
+              className="text-[0.7rem] rounded-2xl"
+              onClick={dismissIncomingRequestToast}
+            >
+              Later
             </Button>
           </div>
         </div>

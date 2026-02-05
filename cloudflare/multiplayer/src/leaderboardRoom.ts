@@ -8,6 +8,7 @@ const PROFILE_CORS_HEADERS: Record<string, string> = {
 };
 
 const GIFT_HISTORY_LIMIT = 24;
+const REQUEST_HISTORY_LIMIT = 24;
 
 interface PlayerState {
   id: string;
@@ -41,6 +42,19 @@ interface GiftSquish {
   image?: string;
 }
 
+interface GiftRequest {
+  id: string;
+  from: string;
+  fromId: string;
+  to: string;
+  toId: string;
+  message: string;
+  createdAt: string;
+  squishId: string;
+  squishName?: string;
+  squishImage?: string;
+}
+
 type ClientMessage =
   | { type: 'join'; name: string; score?: number; unlocked?: string[] }
   | { type: 'score_update'; score: number; unlocked?: string[] }
@@ -51,12 +65,31 @@ type ClientMessage =
       giftType?: string;
       squish?: GiftSquish;
     };
+type GiftRequestSquish = GiftSquish;
+
+type ExtendedClientMessage =
+  | ClientMessage
+  | {
+      type: 'request_gift';
+      to: string;
+      message?: string;
+      squish: GiftRequestSquish;
+    }
+  | {
+      type: 'respond_gift_request';
+      requestId: string;
+      accept: boolean;
+    };
 
 type ServerMessage =
   | { type: 'leaderboard_snapshot'; players: PlayerState[]; gifts: GiftRecord[] }
   | { type: 'leaderboard_update'; players: PlayerState[] }
   | { type: 'gift_event'; gift: GiftRecord }
   | { type: 'connected'; player: PlayerState }
+  | { type: 'gift_request_snapshot'; requests: GiftRequest[] }
+  | { type: 'gift_request'; request: GiftRequest }
+  | { type: 'gift_request_ack'; request: GiftRequest }
+  | { type: 'gift_request_resolved'; requestId: string; accept: boolean }
   | { type: 'error'; message: string };
 
 type ConnectionMeta = {
@@ -81,6 +114,7 @@ const normalizeUnlocked = (input?: unknown): string[] => {
 export class LeaderboardRoom {
   private players = new Map<string, PlayerState>();
   private gifts: GiftRecord[] = [];
+  private giftRequests: GiftRequest[] = [];
   private sockets = new Map<number, WebSocket>();
   private connectionMeta = new Map<number, ConnectionMeta>();
   private nextConnectionId = 0;
@@ -91,9 +125,10 @@ export class LeaderboardRoom {
   }
 
   private async bootstrap() {
-    const stored = await this.state.storage.get(['players', 'gifts']);
+    const stored = await this.state.storage.get(['players', 'gifts', 'giftRequests']);
     const storedPlayers = stored.get('players') as Record<string, StoredPlayerState> | undefined;
     const storedGifts = stored.get('gifts') as GiftRecord[] | undefined;
+    const storedGiftRequests = stored.get('giftRequests') as GiftRequest[] | undefined;
     let shouldPersist = false;
     const players: Array<[string, PlayerState]> = Object.entries(storedPlayers ?? {}).map(
       ([id, player]) => {
@@ -106,6 +141,7 @@ export class LeaderboardRoom {
     );
     this.players = new Map(players);
     this.gifts = storedGifts ?? [];
+    this.giftRequests = storedGiftRequests ?? [];
     if (shouldPersist) {
       await this.persistState();
     }
@@ -115,6 +151,7 @@ export class LeaderboardRoom {
     await Promise.all([
       this.state.storage.put('players', Object.fromEntries(this.players)),
       this.state.storage.put('gifts', this.gifts),
+      this.state.storage.put('giftRequests', this.giftRequests),
     ]);
   }
 
@@ -130,6 +167,16 @@ export class LeaderboardRoom {
   private broadcast(payload: ServerMessage) {
     for (const socket of this.sockets.values()) {
       if (socket.readyState === WebSocket.OPEN) {
+        this.sendToSocket(socket, payload);
+      }
+    }
+  }
+
+  private sendToPlayer(playerId: string, payload: ServerMessage) {
+    for (const [connectionId, meta] of this.connectionMeta.entries()) {
+      if (meta.playerId !== playerId) continue;
+      const socket = this.sockets.get(connectionId);
+      if (socket && socket.readyState === WebSocket.OPEN) {
         this.sendToSocket(socket, payload);
       }
     }
@@ -246,7 +293,13 @@ export class LeaderboardRoom {
     });
   }
 
-  private handleMessage(connectionId: number, message: ClientMessage, socket: WebSocket) {
+  private sendGiftRequestSnapshot(socket: WebSocket, playerId?: string) {
+    if (!playerId) return;
+    const incoming = this.giftRequests.filter((request) => request.toId === playerId);
+    this.sendToSocket(socket, { type: 'gift_request_snapshot', requests: incoming });
+  }
+
+  private handleMessage(connectionId: number, message: ExtendedClientMessage, socket: WebSocket) {
     switch (message.type) {
       case 'join':
         this.handleJoin(connectionId, message, socket);
@@ -256,6 +309,12 @@ export class LeaderboardRoom {
         break;
       case 'send_gift':
         this.handleGift(connectionId, message, socket);
+        break;
+      case 'request_gift':
+        this.handleGiftRequest(connectionId, message, socket);
+        break;
+      case 'respond_gift_request':
+        this.handleGiftRequestResponse(connectionId, message, socket);
         break;
       default:
         this.sendError(socket, 'Unsupported message');
@@ -281,6 +340,7 @@ export class LeaderboardRoom {
       player: this.players.get(normalized.id)!,
     });
     this.sendSnapshot(socket);
+    this.sendGiftRequestSnapshot(socket, normalized.id);
     this.broadcast({ type: 'leaderboard_update', players: this.getLeaderboardSnapshot() });
   }
 
@@ -347,6 +407,155 @@ export class LeaderboardRoom {
     await this.persistState();
     this.broadcast({ type: 'gift_event', gift });
     this.broadcast({ type: 'leaderboard_update', players: this.getLeaderboardSnapshot() });
+  }
+
+  private findPendingDuplicateRequest(fromId: string, toId: string, squishId: string) {
+    return this.giftRequests.find(
+      (request) =>
+        request.fromId === fromId &&
+        request.toId === toId &&
+        request.squishId === squishId
+    );
+  }
+
+  private async handleGiftRequest(
+    connectionId: number,
+    payload: { type: 'request_gift'; to: string; message?: string; squish: GiftRequestSquish },
+    socket: WebSocket
+  ) {
+    const meta = this.connectionMeta.get(connectionId);
+    if (!meta?.playerId || !meta.playerName) {
+      this.sendError(socket, 'Set your name before requesting gifts');
+      return;
+    }
+    const target = payload.to?.trim();
+    if (!target) {
+      this.sendError(socket, 'Choose someone to ask');
+      return;
+    }
+    const targetIdentity = sanitizeName(target);
+    if (targetIdentity.id === meta.playerId) {
+      this.sendError(socket, 'You already have this collection');
+      return;
+    }
+    const squishId = payload.squish?.id?.trim();
+    if (!squishId) {
+      this.sendError(socket, 'Choose a Squishmallow');
+      return;
+    }
+
+    const targetPlayer = this.players.get(targetIdentity.id);
+    if (!targetPlayer?.unlockedIds?.includes(squishId)) {
+      this.sendError(socket, 'They do not have that Squishmallow right now');
+      return;
+    }
+
+    const duplicate = this.findPendingDuplicateRequest(meta.playerId, targetIdentity.id, squishId);
+    if (duplicate) {
+      this.sendError(socket, 'You already asked for that one');
+      return;
+    }
+
+    const request: GiftRequest = {
+      id: crypto.randomUUID(),
+      from: meta.playerName,
+      fromId: meta.playerId,
+      to: targetIdentity.display,
+      toId: targetIdentity.id,
+      message: payload.message?.trim() || `Can I have ${payload.squish?.name ?? 'that Squish'}?`,
+      createdAt: new Date().toISOString(),
+      squishId,
+      squishName: payload.squish?.name?.trim() || undefined,
+      squishImage: payload.squish?.image?.trim() || undefined,
+    };
+
+    this.giftRequests.unshift(request);
+    if (this.giftRequests.length > REQUEST_HISTORY_LIMIT) {
+      this.giftRequests = this.giftRequests.slice(0, REQUEST_HISTORY_LIMIT);
+    }
+
+    await this.persistState();
+    this.sendToPlayer(targetIdentity.id, { type: 'gift_request', request });
+    this.sendToSocket(socket, { type: 'gift_request_ack', request });
+  }
+
+  private async handleGiftRequestResponse(
+    connectionId: number,
+    payload: { type: 'respond_gift_request'; requestId: string; accept: boolean },
+    socket: WebSocket
+  ) {
+    const meta = this.connectionMeta.get(connectionId);
+    if (!meta?.playerId || !meta.playerName) {
+      this.sendError(socket, 'Set your name before responding');
+      return;
+    }
+    const requestId = payload.requestId?.trim();
+    if (!requestId) {
+      this.sendError(socket, 'Missing request');
+      return;
+    }
+
+    const index = this.giftRequests.findIndex((request) => request.id === requestId);
+    if (index < 0) {
+      this.sendError(socket, 'That request is no longer available');
+      return;
+    }
+
+    const request = this.giftRequests[index];
+    if (request.toId !== meta.playerId) {
+      this.sendError(socket, 'That request is not for you');
+      return;
+    }
+
+    const accept = Boolean(payload.accept);
+
+    if (accept) {
+      const owner = this.players.get(request.toId);
+      if (!owner?.unlockedIds?.includes(request.squishId)) {
+        this.giftRequests.splice(index, 1);
+        await this.persistState();
+        this.sendError(socket, 'You no longer have that Squishmallow');
+        this.sendToPlayer(request.fromId, { type: 'gift_request_resolved', requestId, accept: false });
+        this.sendToPlayer(request.toId, { type: 'gift_request_resolved', requestId, accept: false });
+        return;
+      }
+
+      this.removeUnlocked(request.toId, request.to, request.squishId);
+      this.syncUnlocked(request.fromId, request.from, [request.squishId]);
+      this.incrementGiftCounter(request.toId, request.to, 'giftsSent');
+      this.incrementGiftCounter(request.fromId, request.from, 'giftsReceived');
+
+      const gift: GiftRecord = {
+        id: crypto.randomUUID(),
+        from: request.to,
+        to: request.from,
+        message: request.message?.trim() || 'A little surprise from the parade',
+        type: 'sparkles',
+        createdAt: new Date().toISOString(),
+        squishId: request.squishId,
+        squishName: request.squishName,
+        squishImage: request.squishImage,
+      };
+
+      this.gifts.unshift(gift);
+      if (this.gifts.length > GIFT_HISTORY_LIMIT) {
+        this.gifts = this.gifts.slice(0, GIFT_HISTORY_LIMIT);
+      }
+
+      this.giftRequests.splice(index, 1);
+      await this.persistState();
+
+      this.broadcast({ type: 'gift_event', gift });
+      this.broadcast({ type: 'leaderboard_update', players: this.getLeaderboardSnapshot() });
+      this.sendToPlayer(request.fromId, { type: 'gift_request_resolved', requestId, accept: true });
+      this.sendToPlayer(request.toId, { type: 'gift_request_resolved', requestId, accept: true });
+      return;
+    }
+
+    this.giftRequests.splice(index, 1);
+    await this.persistState();
+    this.sendToPlayer(request.fromId, { type: 'gift_request_resolved', requestId, accept: false });
+    this.sendToPlayer(request.toId, { type: 'gift_request_resolved', requestId, accept: false });
   }
 
   private buildProfileHeaders() {
@@ -448,7 +657,7 @@ export class LeaderboardRoom {
     socket.addEventListener('message', (event) => {
       if (typeof event.data === 'string') {
         try {
-          const message = JSON.parse(event.data) as ClientMessage;
+          const message = JSON.parse(event.data) as ExtendedClientMessage;
           this.handleMessage(connectionId, message, socket);
         } catch {
           this.sendError(socket, 'Invalid JSON payload');
