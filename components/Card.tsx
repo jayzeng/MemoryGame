@@ -56,7 +56,7 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
 
   return (
     <div
-      className={`relative cursor-pointer perspective-1000 group w-full aspect-square ${item.isMatched ? 'animate-match-bounce' : ''}`}
+      className={`relative cursor-pointer touch-manipulation select-none perspective-1000 group w-full aspect-square ${item.isMatched ? 'animate-match-bounce' : ''}`}
       onClick={handleClick}
     >
       <div
@@ -67,7 +67,7 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
           className="absolute w-full h-full backface-hidden rounded-3xl bg-white border-4 border-[#CDEBFF] shadow-[0_6px_20px_rgba(0,0,0,0.1)] flex items-center justify-center overflow-hidden"
         >
           <div className="w-2/3 h-2/3 bg-[#CDEBFF] rounded-full opacity-50 flex items-center justify-center">
-            <span className="text-4xl opacity-50">?</span>
+            <span className="text-[clamp(1.25rem,4vw,2.5rem)] opacity-50">?</span>
           </div>
         </div>
 
@@ -97,8 +97,10 @@ export const Card: React.FC<CardProps> = ({ item, squishmallow, onClick, disable
           </div>
 
           {/* Name Label (Sight Reading) */}
-          <div className={`h-8 w-full ${item.isMatched ? 'bg-[#CFF3E2]' : 'bg-[#FFF0F5]'} flex items-center justify-center border-t-2 border-white/50 transition-colors duration-300`}>
-            <span className="font-heading font-bold text-[#6B4F3F] text-sm sm:text-base tracking-widest uppercase">
+          <div
+            className={`h-[clamp(1.25rem,2.6vh,2rem)] w-full ${item.isMatched ? 'bg-[#CFF3E2]' : 'bg-[#FFF0F5]'} flex items-center justify-center border-t-2 border-white/50 transition-colors duration-300`}
+          >
+            <span className="max-w-full px-1 font-heading font-bold text-[#6B4F3F] text-[clamp(0.55rem,1.6vw,1rem)] tracking-[0.18em] sm:tracking-widest uppercase truncate">
               {squishmallow.name}
             </span>
           </div>

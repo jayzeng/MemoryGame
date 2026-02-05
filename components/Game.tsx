@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CardItem, GameState, Squishmallow } from '../types';
 import { MOCK_SQUISHMALLOWS, WORLDS } from '../constants';
@@ -21,12 +21,99 @@ const shuffle = <T,>(array: T[]): T[] => {
   return copy;
 };
 
-const getColumnOptions = (count: number): number[] => {
+const clampNumber = (min: number, value: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const getColumnCandidates = (count: number): number[] => {
   if (count <= 12) return [3, 4];
-  if (count <= 16) return [4];
-  if (count <= 24) return [4, 6];
-  if (count <= 32) return [4, 7];
-  return [5, 8];
+  if (count <= 16) return [4, 5];
+  if (count <= 24) return [4, 5, 6];
+  if (count <= 32) return [4, 5, 6, 7];
+  return [4, 5, 6, 7, 8];
+};
+
+type BoardLayout = {
+  columns: number;
+  rows: number;
+  cellCount: number;
+  cardSizePx: number;
+  gapPx: number;
+  boardWidthPx: number;
+  boardHeightPx: number;
+};
+
+const computeBoardLayout = (
+  cardCount: number,
+  containerWidth: number,
+  containerHeight: number,
+  columnCandidates: number[]
+): BoardLayout => {
+  const safeCardCount = Math.max(0, Math.floor(cardCount));
+  const safeWidth = Math.max(0, containerWidth);
+  const safeHeight = Math.max(0, containerHeight);
+
+  const gapPx = Math.round(
+    clampNumber(6, Math.min(safeWidth, safeHeight) * 0.018, safeWidth < 420 ? 10 : 16)
+  );
+
+  const fallbackColumns = columnCandidates[0] ?? 4;
+  if (!safeCardCount || safeWidth === 0 || safeHeight === 0) {
+    const rows = Math.max(1, Math.ceil(Math.max(1, safeCardCount) / fallbackColumns));
+    const cardSizePx = 120;
+    return {
+      columns: fallbackColumns,
+      rows,
+      cellCount: rows * fallbackColumns,
+      cardSizePx,
+      gapPx,
+      boardWidthPx: fallbackColumns * cardSizePx + (fallbackColumns - 1) * gapPx,
+      boardHeightPx: rows * cardSizePx + (rows - 1) * gapPx,
+    };
+  }
+
+  const targetAspect = safeWidth / safeHeight;
+  let best: BoardLayout | null = null;
+  let bestScore = -Infinity;
+
+  const candidates = Array.from(new Set(columnCandidates))
+    .filter(columns => columns >= 2)
+    .sort((a, b) => a - b);
+
+  for (const columns of candidates) {
+    const rows = Math.max(1, Math.ceil(safeCardCount / columns));
+    const maxCardWidth = (safeWidth - (columns - 1) * gapPx) / columns;
+    const maxCardHeight = (safeHeight - (rows - 1) * gapPx) / rows;
+    const cardSizePx = Math.max(1, Math.floor(Math.min(maxCardWidth, maxCardHeight)));
+    const boardWidthPx = columns * cardSizePx + (columns - 1) * gapPx;
+    const boardHeightPx = rows * cardSizePx + (rows - 1) * gapPx;
+    const cellCount = rows * columns;
+    const wasteCells = cellCount - safeCardCount;
+    const fillRatio = (boardWidthPx * boardHeightPx) / (safeWidth * safeHeight);
+    const aspectDiff = Math.abs(boardWidthPx / boardHeightPx - targetAspect);
+
+    const score =
+      fillRatio * 1000 +
+      cardSizePx * 2 -
+      wasteCells * 0.25 -
+      aspectDiff * 30;
+
+    const layout: BoardLayout = {
+      columns,
+      rows,
+      cellCount,
+      cardSizePx,
+      gapPx,
+      boardWidthPx,
+      boardHeightPx,
+    };
+
+    if (!best || score > bestScore) {
+      best = layout;
+      bestScore = score;
+    }
+  }
+
+  return best ?? computeBoardLayout(cardCount, containerWidth, containerHeight, [fallbackColumns]);
 };
 
 const getChebyshevDistance = (indexA: number, indexB: number, columns: number) => {
@@ -166,6 +253,7 @@ export const Game: React.FC = () => {
   const recentAttemptsRef = useRef<{ duration: number; isMatch: boolean }[]>([]);
   const penaltyActiveRef = useRef(false);
   const reshuffleEffectTimerRef = useRef<number | null>(null);
+  const boardAreaRef = useRef<HTMLDivElement | null>(null);
   const [cards, setCards] = useState<CardItem[]>([]);
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [flippedIds, setFlippedIds] = useState<string[]>([]);
@@ -194,6 +282,36 @@ export const Game: React.FC = () => {
     penaltyActiveRef.current = penaltyActive;
   }, [penaltyActive]);
 
+  const [boardArea, setBoardArea] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = boardAreaRef.current;
+    if (!element) return;
+
+    if (typeof ResizeObserver === 'undefined') {
+      const update = () => {
+        const rect = element.getBoundingClientRect();
+        setBoardArea({ width: rect.width, height: rect.height });
+      };
+      update();
+      window.addEventListener('resize', update);
+      window.addEventListener('orientationchange', update);
+      return () => {
+        window.removeEventListener('resize', update);
+        window.removeEventListener('orientationchange', update);
+      };
+    }
+
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setBoardArea({ width, height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const initializeGame = useCallback(() => {
     // Determine grid size based on world
     const worldIndex = WORLDS.findIndex(w => w.id === worldId) || 0;
@@ -218,7 +336,7 @@ export const Game: React.FC = () => {
       deck.push({ id: `${char.id}-b`, characterId: char.id, isFlipped: false, isMatched: false });
     });
 
-    const columnOptions = getColumnOptions(deck.length);
+    const columnOptions = getColumnCandidates(deck.length);
     setCards(shuffleWithSpread(deck, columnOptions));
     setFlippedIds([]);
     setMatchedIds([]);
@@ -457,15 +575,31 @@ export const Game: React.FC = () => {
 
   if (!worldId) return null;
 
-  const boardGridClass = `grid gap-3 sm:gap-4 w-full max-w-6xl mx-auto pb-4 transition-all duration-300 ${
+  const columnCandidates = useMemo(() => getColumnCandidates(cards.length), [cards.length]);
+  const layout = useMemo(
+    () => computeBoardLayout(cards.length, boardArea.width, boardArea.height, columnCandidates),
+    [cards.length, boardArea.height, boardArea.width, columnCandidates]
+  );
+
+  const paddedCards = useMemo(() => {
+    const padding = Math.max(0, layout.cellCount - cards.length);
+    if (padding === 0) return cards;
+    return [...cards, ...Array.from({ length: padding }, () => null)];
+  }, [cards, layout.cellCount]);
+
+  const boardGridClass = `grid transition-all duration-300 ${
     reshuffleEffect ? 'animate-pulse shadow-[0_0_45px_rgba(255,229,168,0.65)]' : ''
   }`;
-  const boardGridStyle = {
-    gridTemplateColumns: 'repeat(auto-fit, minmax(clamp(100px, 18vw, 150px), 1fr))',
+  const boardGridStyle: React.CSSProperties = {
+    gridTemplateColumns: `repeat(${layout.columns}, ${layout.cardSizePx}px)`,
+    gridAutoRows: `${layout.cardSizePx}px`,
+    gap: `${layout.gapPx}px`,
+    width: `${layout.boardWidthPx}px`,
+    height: `${layout.boardHeightPx}px`,
   };
 
   return (
-    <div className="min-h-screen bg-[#CDEBFF] flex flex-col relative overflow-hidden">
+    <div className="min-h-screen min-h-[100svh] bg-[#CDEBFF] flex flex-col relative overflow-hidden">
       {showConfetti && (
         <ReactConfetti
           numberOfPieces={200}
@@ -489,18 +623,31 @@ export const Game: React.FC = () => {
       </header>
 
       {/* Game Board */}
-      <main className="flex-1 px-3 sm:px-6 pb-6 flex items-start justify-center overflow-y-auto">
-         <div className={boardGridClass} style={boardGridStyle}>
-            {cards.map(card => (
-                <Card 
-                  key={card.id} 
-                  item={card} 
-                  squishmallow={getSquishmallow(card.characterId)} 
+      <main className="flex-1 min-h-0 px-3 sm:px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex items-stretch justify-center overflow-hidden">
+        <div
+          ref={boardAreaRef}
+          className="w-full max-w-6xl flex-1 min-h-0 flex items-center justify-center"
+        >
+          <div className={boardGridClass} style={boardGridStyle}>
+            {paddedCards.map((card, index) =>
+              card ? (
+                <Card
+                  key={card.id}
+                  item={card}
+                  squishmallow={getSquishmallow(card.characterId)}
                   onClick={handleCardClick}
                   disabled={gameState !== GameState.PLAYING || isPaused}
                 />
-            ))}
-         </div>
+              ) : (
+                <div
+                  key={`board-spacer-${index}`}
+                  className="w-full h-full invisible"
+                  aria-hidden="true"
+                />
+              )
+            )}
+          </div>
+        </div>
       </main>
 
       {/* Pause Modal */}
