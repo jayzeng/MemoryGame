@@ -8,23 +8,31 @@ import { Home } from './components/Home';
 import { HolidayProvider } from './components/HolidayContext';
 import { HolidayDecor } from './components/HolidayDecor';
 import { MultiplayerProvider } from './components/MultiplayerProvider';
+import { ParentModeProvider } from './components/ParentModeContext';
+import { SparkleModeProvider } from './components/SparkleModeContext';
+import { SparkleDecor } from './components/SparkleDecor';
 
 const App: React.FC = () => {
   return (
-    <HolidayProvider>
-      <HolidayDecor />
-      <MultiplayerProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/worlds" element={<WorldSelect />} />
-            <Route path="/game/:worldId" element={<Game />} />
-            <Route path="/book" element={<ParadeBook />} />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-          </Routes>
-        </Router>
-      </MultiplayerProvider>
-    </HolidayProvider>
+    <ParentModeProvider>
+      <SparkleModeProvider>
+        <SparkleDecor />
+        <HolidayProvider>
+          <HolidayDecor />
+          <MultiplayerProvider>
+            <Router>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/worlds" element={<WorldSelect />} />
+                <Route path="/game/:worldId" element={<Game />} />
+                <Route path="/book" element={<ParadeBook />} />
+                <Route path="/leaderboard" element={<Leaderboard />} />
+              </Routes>
+            </Router>
+          </MultiplayerProvider>
+        </HolidayProvider>
+      </SparkleModeProvider>
+    </ParentModeProvider>
   );
 };
 

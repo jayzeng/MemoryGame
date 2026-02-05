@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from './Button';
-import { Play, Book, Trophy, Edit2, Snowflake, Camera } from 'lucide-react';
+import { Play, Book, Trophy, Edit2, Snowflake, Camera, Settings } from 'lucide-react';
 import { PLAYER_NAME_EVENT, storage } from '../utils/storage';
 import { MOCK_SQUISHMALLOWS } from '../constants';
 import type { Squishmallow } from '../types';
@@ -15,6 +15,8 @@ import {
   uploadProfilePicture,
 } from '../utils/profile';
 import { useMultiplayer } from './MultiplayerProvider';
+import { useParentMode } from './ParentModeContext';
+import { ParentSettingsModal } from './ParentSettingsModal';
 
 const ORBIT_CONFIGS = [
   { radius: 180, size: 80, duration: 12, delay: '0s', borderColor: 'border-[#FFD6E8]/50' },
@@ -113,6 +115,8 @@ export const Home: React.FC = () => {
   const [remoteNames, setRemoteNames] = useState<Set<string>>(() => new Set());
   const [isCheckingName, setIsCheckingName] = useState(false);
   const { players } = useMultiplayer();
+  const { requestParentUnlock } = useParentMode();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const loadRemoteNames = useCallback(async () => {
     if (!profileApiBase) return new Set<string>();
@@ -514,7 +518,26 @@ export const Home: React.FC = () => {
   );
 
   return (
-    <div className="relative min-h-screen bg-[#CDEBFF] flex flex-col items-center justify-center px-4 sm:px-6 pt-8 pb-16 text-center gap-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
+    <div className="relative h-screen min-h-[600px] bg-[#CDEBFF] flex flex-col items-center justify-center px-4 sm:px-6 py-4 text-center gap-4 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
+      {/* Settings Button */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          onClick={async () => {
+            const unlocked = await requestParentUnlock();
+            if (unlocked) setIsSettingsOpen(true);
+          }}
+          className="p-3 bg-white/80 backdrop-blur-sm rounded-full shadow-md text-[#6B4F3F] hover:bg-white transition-all border border-white"
+          title="Parent Settings"
+        >
+          <Settings size={20} />
+        </button>
+      </div>
+
+      <ParentSettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+      />
+
       <div className="absolute inset-0 z-0 flex items-center justify-center">
         {scaledOrbits.map((config, index) => {
           const squish = floatingSquishmallows[index];
@@ -547,7 +570,7 @@ export const Home: React.FC = () => {
                     className="flex flex-col items-center gap-1 pointer-events-auto"
                   >
                     <div
-                      className="relative rounded-3xl border border-white/80 bg-white/90 shadow-2xl overflow-hidden"
+                      className="relative rounded-2xl border border-white/80 bg-white/90 shadow-xl overflow-hidden"
                       style={{ width: `${config.size}px`, height: `${config.size}px` }}
                     >
                       <img
@@ -557,7 +580,7 @@ export const Home: React.FC = () => {
                         loading="lazy"
                       />
                     </div>
-                    <span className="font-heading text-[0.65rem] text-[#FF8FAB] drop-shadow-sm">
+                    <span className="font-heading text-[0.6rem] text-[#FF8FAB] drop-shadow-sm">
                       {squish.name}
                     </span>
                   </div>
@@ -568,19 +591,13 @@ export const Home: React.FC = () => {
         })}
       </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center gap-8 w-full max-w-5xl mx-auto">
-        <div className="relative flex flex-col items-center gap-5 animate-in slide-in-from-top duration-700">
-          <div className="relative z-10 flex flex-col items-center gap-3">
-            {isHoliday && (
-              <div className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-1 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[#B33A3A] shadow-md border border-white">
-                <Snowflake size={12} className="text-[#4AA76A]" />
-                Happy Holidays
-              </div>
-            )}
+      <div className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-w-5xl mx-auto h-full max-h-[800px]">
+        <div className="relative flex flex-col items-center gap-3 animate-in slide-in-from-top duration-700">
+          <div className="relative z-10 flex flex-col items-center gap-2">
             <div className="relative">
               <div className="absolute -inset-5 rounded-[3rem] bg-gradient-to-br from-[#FFD6E8]/90 via-[#FF8FAB]/60 to-transparent opacity-75 blur-2xl" />
-              <div className="relative bg-white p-6 rounded-[3rem] shadow-2xl border-4 border-[#FFD6E8] animate-dance origin-center">
-                <h1 className="font-heading text-5xl md:text-6xl text-[#6B4F3F] leading-tight">
+              <div className="relative bg-white p-4 md:p-5 rounded-[2.5rem] shadow-xl border-4 border-[#FFD6E8] animate-dance origin-center">
+                <h1 className="font-heading text-4xl md:text-5xl text-[#6B4F3F] leading-tight">
                   Squishmallow
                   <br />
                   <span className="text-[#FF8FAB]">Memory</span>
@@ -589,17 +606,37 @@ export const Home: React.FC = () => {
                 </h1>
               </div>
             </div>
-            <p className="max-w-xl px-6 font-body text-sm text-[#6B4F3F]/80 md:text-base leading-relaxed">
-              {HERO_TAGLINE}
-            </p>
           </div>
         </div>
 
-        <div className="w-full max-w-lg bg-white/80 backdrop-blur-sm rounded-3xl p-6 sm:p-8 shadow-lg border-4 border-white animate-in zoom-in duration-500 animate-float" style={{ animationDelay: '1s' }}>
-        <div className="flex flex-col items-center gap-4 mb-4">
-          <div className="flex flex-col items-center gap-4 w-full">
-            <div className="relative">
-              <div className="w-24 h-24 md:w-28 md:h-28 rounded-full border-4 border-white bg-white/80 shadow-2xl overflow-hidden flex items-center justify-center">
+        <div className="relative flex flex-col items-center w-full">
+          {/* Side Buttons - Floating Stickers (Desktop Only) */}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-6 -translate-x-12">
+            <Link to="/book" className="transform -rotate-6 hover:rotate-0 transition-transform">
+              <div className="bg-[#DCCBFF] p-4 rounded-[2.5rem] shadow-2xl border-4 border-white flex flex-col items-center gap-2 w-36 hover:scale-110 transition-all">
+                <div className="bg-white p-3 rounded-2xl text-[#6B4F3F] shadow-inner">
+                  <Book size={28} />
+                </div>
+                <span className="font-heading text-base text-[#6B4F3F] font-bold uppercase tracking-widest">My Pals</span>
+              </div>
+            </Link>
+          </div>
+
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-6 translate-x-12">
+            <Link to="/leaderboard" className="transform rotate-6 hover:rotate-0 transition-transform">
+              <div className="bg-[#CFF3E2] p-4 rounded-[2.5rem] shadow-2xl border-4 border-white flex flex-col items-center gap-2 w-36 hover:scale-110 transition-all">
+                <div className="bg-white p-3 rounded-2xl text-[#6B4F3F] shadow-inner">
+                  <Trophy size={28} />
+                </div>
+                <span className="font-heading text-base text-[#6B4F3F] font-bold uppercase tracking-widest leading-none text-center">Top<br/>Parade</span>
+              </div>
+            </Link>
+          </div>
+
+          {/* Player Profile Polaroid Card */}
+          <div className="relative group perspective-1000 animate-in zoom-in duration-500" style={{ animationDelay: '0.4s' }}>
+            <div className="bg-white p-3 pb-12 rounded-sm shadow-[0_25px_60px_rgba(0,0,0,0.12)] border border-gray-100 transform -rotate-1 group-hover:rotate-0 transition-all duration-500 hover:scale-105">
+              <div className="relative w-44 h-44 md:w-52 md:h-52 bg-gray-50 overflow-hidden rounded-sm border-2 border-gray-50 flex items-center justify-center">
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}
@@ -608,200 +645,190 @@ export const Home: React.FC = () => {
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center px-3 text-center">
-                    <span className="text-[0.55rem] tracking-[0.4em] uppercase text-[#B48E25]">Add</span>
-                    <span className="text-[0.65rem] tracking-[0.3em] uppercase text-[#B48E25]">photo</span>
+                  <div className="flex flex-col items-center justify-center px-3 text-center opacity-30">
+                    <Camera size={44} className="text-[#B48E25] mb-2" />
+                    <span className="text-[0.65rem] tracking-[0.3em] uppercase text-[#B48E25] font-heading">Add Photo</span>
+                  </div>
+                )}
+                
+                {/* Photo Actions Overlay */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                  {showUploadButton && (
+                    <button 
+                      onClick={openPhotoPicker} 
+                      disabled={isUploadingPhoto || !name.trim() || !profileApiBase}
+                      className="p-3 bg-white rounded-full text-[#6B4F3F] hover:scale-110 transition-transform shadow-lg disabled:opacity-50"
+                    >
+                      <Camera size={20} />
+                    </button>
+                  )}
+                  {showCameraButton && (
+                    <button 
+                      onClick={openCamera} 
+                      disabled={isUploadingPhoto}
+                      className="p-3 bg-white rounded-full text-[#6B4F3F] hover:scale-110 transition-transform shadow-lg disabled:opacity-50"
+                    >
+                      <Edit2 size={20} />
+                    </button>
+                  )}
+                </div>
+                
+                {isUploadingPhoto && (
+                  <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                    <div className="w-6 h-6 border-4 border-[#FF8FAB] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+              
+              <div className="absolute bottom-3 left-0 right-0 px-3">
+                {isEditing ? (
+                  <div className="flex flex-col gap-1">
+                    <form onSubmit={handleSaveName} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => {
+                          setName(e.target.value);
+                          setNameFeedback(null);
+                          setSuggestedName(null);
+                        }}
+                        placeholder="Your Name"
+                        className="flex-1 bg-transparent border-b-2 border-[#DCCBFF] px-1 py-0.5 font-heading text-[#6B4F3F] text-center focus:outline-none focus:border-[#FF8FAB] text-lg"
+                        maxLength={12}
+                        autoFocus
+                      />
+                      <button type="submit" className="p-1 text-[#FF8FAB] hover:scale-110 transition-transform">
+                        <Edit2 size={18} />
+                      </button>
+                    </form>
+                    {nameFeedback && (
+                      <p className="text-[0.55rem] text-red-400 font-bold uppercase tracking-tighter">{nameFeedback}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <div className="flex items-center justify-center gap-2 cursor-pointer group/name" onClick={() => setIsEditing(true)}>
+                      <h2 className="font-heading text-2xl text-[#6B4F3F]">{name || 'New Friend'}</h2>
+                      <Edit2 size={14} className="text-[#6B4F3F] opacity-0 group-hover/name:opacity-30 transition-opacity" />
+                    </div>
                   </div>
                 )}
               </div>
             </div>
-            {isEditing ? (
-              <div className="flex flex-col gap-2 w-full">
-                <form className="flex gap-2 w-full" onSubmit={handleSaveName}>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      setNameFeedback(null);
-                      setSuggestedName(null);
-                    }}
-                    placeholder="Enter your name"
-                    className="flex-1 bg-white border-2 border-[#DCCBFF] rounded-xl px-4 py-2 font-heading text-[#6B4F3F] text-lg focus:outline-none focus:border-[#6B4F3F]"
-                    maxLength={12}
-                  />
-                  <Button
-                    variant="secondary"
-                    type="submit"
-                    className="rounded-xl px-4 py-2 font-heading uppercase tracking-wide text-xs"
-                    disabled={!name.trim() || isCheckingName}
-                  >
-                    {isCheckingName ? 'Checking...' : 'Save'}
-                  </Button>
-                </form>
-                {nameFeedback && (
-                  <div className="w-full rounded-xl border border-[#F2B8B5] bg-[#FFF1F0] px-4 py-3 text-left text-sm text-[#B33A3A]">
-                    <p className="font-heading mb-1">{nameFeedback}</p>
-                    {suggestedName && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setName(suggestedName);
-                          setNameFeedback(null);
-                        }}
-                        className="rounded-full bg-white px-3 py-1 text-[0.75rem] font-heading font-bold uppercase tracking-wide text-[#B33A3A] shadow-sm border border-[#F2B8B5] hover:bg-[#FFECEC]"
-                      >
-                        Use {suggestedName}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div
-                className="flex items-center gap-2 group cursor-pointer"
-                onClick={() => setIsEditing(true)}
-              >
-                <h2 className="font-heading text-2xl text-[#6B4F3F]">Hi, {name}!</h2>
-                <Edit2 size={16} className="opacity-0 group-hover:opacity-50" />
-              </div>
-            )}
-            {(showUploadButton || showCameraButton) && (
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex items-center gap-2">
-                  {showUploadButton && (
-                    <button
-                      type="button"
-                      onClick={openPhotoPicker}
-                      disabled={isUploadingPhoto || !name.trim() || !profileApiBase}
-                      className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-2 text-[0.7rem] font-heading font-bold uppercase tracking-[0.4em] text-[#6B4F3F] shadow-lg transition duration-200 hover:border-[#FF8FAB] disabled:opacity-40 disabled:hover:border-white"
-                    >
-                      <Camera size={16} />
-                      {isUploadingPhoto ? 'Saving...' : 'Upload photo'}
-                    </button>
-                  )}
-                  {showCameraButton && (
-                    <button
-                      type="button"
-                      onClick={openCamera}
-                      disabled={isUploadingPhoto}
-                      className="inline-flex items-center gap-2 rounded-full border border-[#DCCBFF] bg-[#DCCBFF]/60 px-4 py-2 text-[0.7rem] font-heading font-bold uppercase tracking-[0.4em] text-[#6B4F3F] shadow-lg transition duration-200 hover:border-[#B0A2FF] disabled:opacity-40 disabled:hover:border-[#DCCBFF]"
-                    >
-                      Camera
-                    </button>
-                  )}
-                </div>
-                {photoFeedback && (
-                  <p className="text-[0.65rem] text-[#6B4F3F]/70">{photoFeedback}</p>
-                )}
-                {!profileApiBase && (
-                  <p className="text-[0.65rem] text-[#6B4F3F]/60">
-                    Multiplayer backend required for photo uploads.
-                  </p>
-                )}
-                {!isMobileDevice && !cameraSupported && (
-                  <p className="text-[0.65rem] text-[#6B4F3F]/60">
-                    Live camera capture is available only on supported browsers.
-                  </p>
-                )}
-              </div>
-            )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture={captureAttr}
-                className="hidden"
-                onChange={handlePhotoSelection}
-              />
+            
+            {/* Polaroid Tape Decor */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-24 h-7 bg-[#FFD6E8]/60 backdrop-blur-sm -rotate-2 z-10 border border-white/40 shadow-sm" />
           </div>
         </div>
-        {isCameraOpen && (
-          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4">
-            <div className="w-full max-w-md rounded-[2rem] bg-white/95 p-4 shadow-2xl space-y-4">
+
+        {/* Progress and Play Section */}
+        <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+          {/* Collection Squishy Progress Bar */}
+          <div className="w-full bg-white/40 backdrop-blur-sm rounded-[2rem] p-4 shadow-inner border border-white/80 animate-in slide-in-from-bottom duration-700 delay-200">
+            <div className="flex items-center justify-between mb-1.5 px-2">
+              <p className="font-heading text-[#6B4F3F] text-[0.6rem] uppercase tracking-[0.2em] font-bold">Parade Progress</p>
+              <span className="font-heading text-[#FF8FAB] text-xs font-bold">{collectedCount} / {MOCK_SQUISHMALLOWS.length}</span>
+            </div>
+            <div className="relative w-full h-7 bg-white/80 rounded-full border-2 border-[#FFE9A8] overflow-hidden shadow-sm">
+              <div
+                className="h-full bg-gradient-to-r from-[#FFD6E8] to-[#FF8FAB] transition-all duration-1000 relative rounded-full"
+                style={{ width: `${Math.max(8, (collectedCount / MOCK_SQUISHMALLOWS.length) * 100)}%` }}
+              >
+                {/* Shine effect */}
+                <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent h-1/2" />
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full flex flex-col gap-3 animate-in slide-in-from-bottom duration-700 delay-300">
+            <Link to="/worlds" className={`w-full ${!playLink ? 'pointer-events-none' : ''}`} aria-disabled={!playLink}>
+              <Button
+                variant="primary"
+                fullWidth
+                className="h-16 text-2xl shadow-xl hover:scale-105 transition-transform"
+                disabled={!playLink}
+              >
+                <Play fill="#6B4F3F" className="mr-2" size={28} />
+                Start Parade
+              </Button>
+            </Link>
+
+            {/* Mobile/Small Screen Action Buttons */}
+            <div className="flex lg:hidden gap-3">
+              <Link to="/book" className="flex-1">
+                <Button variant="secondary" fullWidth className="h-12 text-sm bg-white border-[#E6E6E6] shadow-md">
+                  <Book className="mr-2 text-[#6B4F3F]" size={16} />
+                  My Pals
+                </Button>
+              </Link>
+              <Link to="/leaderboard" className="flex-1">
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  className="h-12 text-sm bg-[#CFF3E2] border-[#a5e0c5] hover:bg-[#bbf0da] shadow-md"
+                >
+                  <Trophy className="mr-2" size={16} />
+                  Tops
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Premium Badge Footer */}
+        <footer className="mt-auto pb-4 animate-in fade-in duration-1000 delay-400">
+          <div className="flex items-center gap-2 px-6 py-2 rounded-full bg-white/90 backdrop-blur-md shadow-md border-2 border-[#DCCBFF] text-[#6B4F3F]">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#CFF3E2] animate-pulse" />
+            <span className="text-[0.6rem] font-heading font-bold uppercase tracking-[0.2em] whitespace-nowrap">
+              Safe & Cozy Play • No Ads
+            </span>
+            <div className="w-1.5 h-1.5 rounded-full bg-[#FFD6E8] animate-pulse" />
+          </div>
+        </footer>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture={captureAttr}
+        className="hidden"
+        onChange={handlePhotoSelection}
+      />
+
+      {isCameraOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+          <div className="w-full max-w-md rounded-[2.5rem] bg-white p-4 shadow-2xl space-y-4 border-8 border-[#DCCBFF] animate-in zoom-in-95 duration-300">
+            <div className="relative aspect-video rounded-[1.5rem] overflow-hidden bg-black shadow-inner">
               <video
                 ref={videoRef}
                 autoPlay
                 muted
                 playsInline
-                className="w-full rounded-[1.5rem] bg-black"
-              />
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={capturePhoto}
-                  disabled={isUploadingPhoto}
-                  className="flex-1 rounded-full bg-[#FFD6E8] px-4 py-3 text-[0.8rem] font-heading font-bold uppercase tracking-[0.3em] text-[#6B4F3F] shadow-lg transition duration-200 hover:bg-[#ffc2dd] disabled:opacity-40"
-                >
-                  {isUploadingPhoto ? 'Saving…' : 'Take photo'}
-                </button>
-                <button
-                  type="button"
-                  onClick={closeCamera}
-                  className="flex-1 rounded-full border border-[#DCCBFF] bg-white px-4 py-3 text-[0.8rem] font-heading font-bold uppercase tracking-[0.3em] text-[#6B4F3F] shadow-lg transition duration-200 hover:border-[#6B4F3F]"
-                >
-                  Cancel
-                </button>
-              </div>
-              <p className="text-[0.65rem] text-[#6B4F3F]/60">
-                Use your device camera to take a cozy profile shot.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-[#FFF] rounded-2xl p-4 border-2 border-[#E6E6E6]">
-            <p className="font-body text-[#6B4F3F] text-sm uppercase font-bold tracking-wider mb-1">Collection</p>
-            <div className="flex items-end justify-center gap-2">
-              <span className="font-heading text-4xl text-[#FF8FAB]">{collectedCount}</span>
-              <span className="font-heading text-2xl text-gray-400">/ {MOCK_SQUISHMALLOWS.length}</span>
-            </div>
-            <div className="w-full bg-gray-100 h-3 rounded-full mt-2 overflow-hidden">
-              <div
-                className="h-full bg-[#FF8FAB] transition-all duration-1000"
-                style={{ width: `${(collectedCount / MOCK_SQUISHMALLOWS.length) * 100}%` }}
+                className="w-full h-full object-cover scale-x-[-1]"
               />
             </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4 w-full max-w-xs animate-in slide-in-from-bottom duration-700 delay-200">
-          <Link to="/worlds" className={`w-full ${!playLink ? 'pointer-events-none' : ''}`} aria-disabled={!playLink}>
-            <Button
-              variant="primary"
-              fullWidth
-              className="h-20 text-2xl shadow-lg hover:scale-105 transition-transform"
-              disabled={!playLink}
-            >
-              <Play fill="#6B4F3F" className="mr-2" />
-              Play
-            </Button>
-          </Link>
-
-          <div className="flex gap-4">
-            <Link to="/book" className="flex-1">
-              <Button variant="secondary" fullWidth className="h-16 text-lg hover:scale-105 transition-transform">
-                <Book className="mr-2" size={20} />
-                Book
+            <div className="flex items-center gap-3">
+              <Button
+                variant="primary"
+                fullWidth
+                onClick={capturePhoto}
+                disabled={isUploadingPhoto}
+                className="flex-1 h-14"
+              >
+                {isUploadingPhoto ? 'Saving…' : 'Take Photo'}
               </Button>
-            </Link>
-            <Link to="/leaderboard" className="flex-1">
               <Button
                 variant="secondary"
-                fullWidth
-                className="h-16 text-lg hover:scale-105 transition-transform bg-[#CFF3E2] border-[#a5e0c5] hover:bg-[#bbf0da]"
+                onClick={closeCamera}
+                className="flex-1 h-14 border-[#E6E6E6]"
               >
-                <Trophy className="mr-2" size={20} />
-                Top
+                Cancel
               </Button>
-            </Link>
+            </div>
           </div>
         </div>
-
-        <footer className="fixed bottom-3 left-1/2 -translate-x-1/2 text-[#6B4F3F] opacity-60 text-xs sm:text-sm font-bold px-4 py-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md border border-white">
-          Safe & Cozy Play • No Ads
-        </footer>
-      </div>
+      )}
     </div>
   );
 };

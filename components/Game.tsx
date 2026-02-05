@@ -264,6 +264,7 @@ export const Game: React.FC = () => {
   const [reshuffleEffect, setReshuffleEffect] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<Squishmallow[]>([]);
+  const [matchCelebration, setMatchCelebration] = useState<Squishmallow | null>(null);
   const [selectedSquish, setSelectedSquish] = useState<Squishmallow | null>(null);
   const [reviewQueue, setReviewQueue] = useState<LearningEvent[]>([]);
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
@@ -431,10 +432,15 @@ export const Game: React.FC = () => {
       if (card1 && card2) {
         if (card1.characterId === card2.characterId) {
           // Match!
+          const matchedSquish = getSquishmallow(card1.characterId);
           soundManager.playMatch();
           
+          // Show celebration overlay
+          setMatchCelebration(matchedSquish);
+          setTimeout(() => setMatchCelebration(null), 1800);
+          
           // Audio reinforcement for the word
-          const name = getSquishmallow(card1.characterId).name;
+          const name = matchedSquish.name;
           setTimeout(() => {
             soundManager.speak(name);
           }, 300);
@@ -444,14 +450,12 @@ export const Game: React.FC = () => {
           storage.unlockSquishmallow(card1.characterId);
           
           if (isNew) {
-              const char = getSquishmallow(card1.characterId);
               // Avoid duplicates in the new list if matched twice
               setNewlyUnlocked(prev => {
-                  if (prev.some(p => p.id === char.id)) return prev;
-                  return [...prev, char];
+                  if (prev.some(p => p.id === matchedSquish.id)) return prev;
+                  return [...prev, matchedSquish];
               });
           }
-          const matchedSquish = getSquishmallow(card1.characterId);
           const reviewEvent = buildLearningEvent(matchedSquish, 'match');
           setReviewQueue(prev =>
             prev.some(event => event.word === reviewEvent.word) ? prev : [...prev, reviewEvent]
@@ -606,6 +610,27 @@ export const Game: React.FC = () => {
           recycle={false}
           colors={isHoliday ? ['#E05858', '#4CC38A', '#FFE29A', '#FFFFFF'] : undefined}
         />
+      )}
+
+      {/* Match Celebration Overlay */}
+      {matchCelebration && (
+        <div className="absolute inset-0 z-[100] pointer-events-none flex items-center justify-center animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px]" />
+          <div className="relative flex flex-col items-center gap-6 transform -rotate-2 animate-in zoom-in duration-300">
+            <div className="relative">
+              <div className="absolute -inset-8 bg-[#FFE9A8] rounded-full blur-3xl opacity-60 animate-pulse" />
+              <div className="relative w-48 h-48 sm:w-64 sm:h-64 bg-white rounded-full shadow-[0_0_80px_rgba(255,233,168,0.8)] flex items-center justify-center p-8 border-[12px] border-[#FFE9A8] animate-bounce">
+                <img src={matchCelebration.image} alt={matchCelebration.name} className="w-full h-full object-contain drop-shadow-2xl" />
+              </div>
+              <div className="absolute -top-4 -right-4 bg-[#FF8FAB] text-white p-3 rounded-full shadow-lg animate-spin-slow">
+                <Sparkles size={32} fill="white" />
+              </div>
+            </div>
+            <div className="bg-white px-10 py-4 rounded-[2rem] shadow-2xl border-4 border-[#FF8FAB] animate-in slide-in-from-bottom duration-500">
+              <h2 className="font-heading text-4xl sm:text-5xl text-[#6B4F3F] tracking-tight">{matchCelebration.name}!</h2>
+            </div>
+          </div>
+        </div>
       )}
       
       {/* Top Bar */}

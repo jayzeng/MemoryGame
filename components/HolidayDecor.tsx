@@ -58,26 +58,6 @@ export const HolidayDecor: React.FC = () => {
           <div className="holiday-lights" aria-hidden="true" />
         </>
       )}
-      <button
-        type="button"
-        onClick={toggleHoliday}
-        aria-pressed={isHoliday}
-        aria-label="Toggle holiday mode"
-        className={`fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full border-2 px-4 py-2 text-xs font-bold uppercase tracking-wide shadow-lg transition-all ${
-          isHoliday
-            ? 'bg-white/90 border-[#D95D5D] text-[#B33A3A] hover:bg-white'
-            : 'bg-white/80 border-white text-[#6B4F3F] hover:bg-white'
-        }`}
-      >
-        <span className="flex items-center gap-2">
-          {isHoliday ? <Gift size={16} /> : <Snowflake size={16} />}
-          <span className="hidden sm:inline">Holiday Mode</span>
-          <span className="sm:hidden">Holiday</span>
-        </span>
-        <span className="rounded-full bg-[#FFE9A8] px-2 py-0.5 text-[0.6rem] text-[#6B4F3F]">
-          {isHoliday ? 'On' : 'Off'}
-        </span>
-      </button>
     </>
   );
 };
