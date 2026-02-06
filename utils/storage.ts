@@ -3,6 +3,7 @@ import { LeaderboardEntry } from '../types';
 
 const KEYS = {
   PLAYER_NAME: 'sm_player_name',
+  PLAYER_NAMES: 'sm_player_names',
   UNLOCKED_PREFIX: 'sm_unlocked_', // Changed from simple key to prefix
   LEADERBOARD: 'sm_leaderboard',
 };
@@ -22,7 +23,58 @@ export const storage = {
     return localStorage.getItem(KEYS.PLAYER_NAME) || '';
   },
 
+  getPlayerNames: (): string[] => {
+    const raw = localStorage.getItem(KEYS.PLAYER_NAMES);
+    if (!raw) {
+      const current = storage.getPlayerName().trim();
+      const fromLeaderboard = storage
+        .getLeaderboard()
+        .map((entry) => entry.name)
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean) as string[];
+      const seed = current ? [current, ...fromLeaderboard] : fromLeaderboard;
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      for (const value of seed) {
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(value);
+      }
+      return unique;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const names = parsed
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean) as string[];
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      for (const value of names) {
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(value);
+      }
+      return unique;
+    } catch (e) {
+      return [];
+    }
+  },
+
+  _trackPlayerName: (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const existing = storage.getPlayerNames();
+    const next = [trimmed, ...existing.filter((value) => value.toLowerCase() !== trimmed.toLowerCase())].slice(0, 12);
+    localStorage.setItem(KEYS.PLAYER_NAMES, JSON.stringify(next));
+  },
+
   setPlayerName: (name: string) => {
+    storage._trackPlayerName(name);
     localStorage.setItem(KEYS.PLAYER_NAME, name);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(PLAYER_NAME_EVENT, { detail: name }));

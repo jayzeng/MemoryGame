@@ -88,6 +88,7 @@ const getRandomSquishmallows = (count: number): Squishmallow[] => {
 export const Home: React.FC = () => {
   const [name, setName] = useState('');
   const [savedName, setSavedName] = useState('');
+  const [knownNames, setKnownNames] = useState<string[]>(() => storage.getPlayerNames());
   const [isEditing, setIsEditing] = useState(false);
   const [collectedCount, setCollectedCount] = useState(0);
   const [floatingSquishmallows] = useState<Squishmallow[]>(() => getRandomSquishmallows(ORBIT_CONFIGS.length));
@@ -113,6 +114,8 @@ export const Home: React.FC = () => {
   );
   const [nameFeedback, setNameFeedback] = useState<string | null>(null);
   const [suggestedName, setSuggestedName] = useState<string | null>(null);
+  const [resumeCandidate, setResumeCandidate] = useState<string | null>(null);
+  const [resumeBlockedReason, setResumeBlockedReason] = useState<string | null>(null);
   const [remoteNames, setRemoteNames] = useState<Set<string>>(() => new Set());
   const [isCheckingName, setIsCheckingName] = useState(false);
   const { players } = useMultiplayer();
@@ -144,12 +147,6 @@ export const Home: React.FC = () => {
       const names = new Set<string>();
       (external ?? remoteNames).forEach((value) => {
         const normalizedEntry = normalizeName(value);
-        if (normalizedEntry) {
-          names.add(normalizedEntry);
-        }
-      });
-      storage.getLeaderboard().forEach((entry) => {
-        const normalizedEntry = normalizeName(entry.name);
         if (normalizedEntry) {
           names.add(normalizedEntry);
         }
@@ -213,6 +210,7 @@ export const Home: React.FC = () => {
   // Load initial state
   useEffect(() => {
     const storedName = storage.getPlayerName();
+    setKnownNames(storage.getPlayerNames());
     if (storedName) {
       setName(storedName);
       setSavedName(storedName);
@@ -228,6 +226,7 @@ export const Home: React.FC = () => {
       if (typeof detail === 'string') {
         setSavedName(detail);
         setName(detail);
+        setKnownNames(storage.getPlayerNames());
       }
     };
     window.addEventListener(PLAYER_NAME_EVENT, handleNameChange as EventListener);
@@ -330,10 +329,31 @@ export const Home: React.FC = () => {
     setCollectedCount(storage.getUnlockedIds().length);
   };
 
+  const applyPlayerName = (nextName: string) => {
+    const trimmed = nextName.trim();
+    if (!trimmed) return;
+    setNameFeedback(null);
+    setSuggestedName(null);
+    setResumeCandidate(null);
+    setResumeBlockedReason(null);
+    setName(trimmed);
+    storage.setPlayerName(trimmed);
+    setSavedName(trimmed);
+    setKnownNames(storage.getPlayerNames());
+    setIsEditing(false);
+    storage.updateLeaderboard();
+    refreshCount();
+  };
+
   const handleSaveName = async (event?: React.FormEvent) => {
     event?.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
+
+    if (knownNames.some((known) => known.toLowerCase() === trimmed.toLowerCase())) {
+      applyPlayerName(trimmed);
+      return;
+    }
 
     let takenNames = buildTakenNames();
     if (profileApiBase && remoteNames.size === 0) {
@@ -347,6 +367,19 @@ export const Home: React.FC = () => {
     }
 
     if (isNameTaken(trimmed, takenNames)) {
+      const activePlayerSet = new Set(
+        players
+          .map((player) => normalizeName(player.name))
+          .filter(Boolean) as string[]
+      );
+      const isActiveConflict = isNameTaken(trimmed, activePlayerSet);
+      if (isActiveConflict) {
+        setResumeCandidate(null);
+        setResumeBlockedReason('That name is in use right now.');
+      } else {
+        setResumeCandidate(trimmed);
+        setResumeBlockedReason(null);
+      }
       const alternative = suggestName(trimmed, takenNames);
       setSuggestedName(alternative);
       setNameFeedback(
@@ -357,14 +390,7 @@ export const Home: React.FC = () => {
       return;
     }
 
-    setNameFeedback(null);
-    setSuggestedName(null);
-    storage.setPlayerName(trimmed);
-    setSavedName(trimmed);
-    setIsEditing(false);
-
-    storage.updateLeaderboard();
-    refreshCount();
+    applyPlayerName(trimmed);
   };
 
   const ensurePhotoPrerequisites = () => {
@@ -711,6 +737,8 @@ export const Home: React.FC = () => {
                           setName(e.target.value);
                           setNameFeedback(null);
                           setSuggestedName(null);
+                          setResumeCandidate(null);
+                          setResumeBlockedReason(null);
                         }}
                         placeholder="Your Name"
                         className="flex-1 bg-transparent border-b-2 border-[#DCCBFF] px-1 py-0.5 font-heading text-[#6B4F3F] text-center focus:outline-none focus:border-[#FF8FAB] text-lg"
@@ -723,6 +751,59 @@ export const Home: React.FC = () => {
                     </form>
                     {nameFeedback && (
                       <p className="text-[0.55rem] text-red-400 font-bold uppercase tracking-tighter">{nameFeedback}</p>
+                    )}
+                    {(suggestedName || resumeCandidate || resumeBlockedReason) && (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          {suggestedName && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setName(suggestedName);
+                                setNameFeedback(null);
+                                setSuggestedName(null);
+                                setResumeCandidate(null);
+                                setResumeBlockedReason(null);
+                              }}
+                              className="rounded-full bg-white/70 px-2.5 py-1 text-[0.55rem] font-bold uppercase tracking-widest text-[#6B4F3F] shadow-sm border border-white hover:bg-white"
+                            >
+                              Try {suggestedName}
+                            </button>
+                          )}
+                          {resumeCandidate && (
+                            <button
+                              type="button"
+                              onClick={() => applyPlayerName(resumeCandidate)}
+                              className="rounded-full bg-[#FF8FAB] px-2.5 py-1 text-[0.55rem] font-bold uppercase tracking-widest text-white shadow-sm border border-[#FF8FAB] hover:brightness-95"
+                            >
+                              Resume
+                            </button>
+                          )}
+                        </div>
+                        {resumeBlockedReason && (
+                          <p className="text-[0.55rem] text-red-400 font-bold uppercase tracking-tighter">{resumeBlockedReason}</p>
+                        )}
+                        {resumeCandidate && profileApiBase && remoteNames.has(normalizeName(resumeCandidate)) && (
+                          <p className="text-[0.5rem] text-[#6B4F3F]/60 font-bold uppercase tracking-tighter text-center">
+                            Resume may overwrite the profile photo for this name.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {knownNames.length > 0 && (
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                        {knownNames.map((known) => (
+                          <button
+                            key={known}
+                            type="button"
+                            onClick={() => applyPlayerName(known)}
+                            className="rounded-full bg-white/70 px-2.5 py-1 text-[0.55rem] font-bold uppercase tracking-widest text-[#6B4F3F] shadow-sm border border-white hover:bg-white"
+                            title="Resume this player"
+                          >
+                            {known}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ) : (
